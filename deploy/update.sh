@@ -25,12 +25,11 @@ log "Stopping Skywatch service..."
 systemctl stop skywatch 2>/dev/null || true
 
 log "Updating Skywatch..."
-git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
 cd "$INSTALL_DIR"
 
 if [ -d ".git" ]; then
-    git fetch origin
-    git reset --hard origin/main
+    git -c safe.directory="$INSTALL_DIR" fetch origin
+    git -c safe.directory="$INSTALL_DIR" reset --hard origin/main
 else
     error "Not a git repository. Cannot update."
 fi
