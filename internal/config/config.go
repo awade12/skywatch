@@ -15,6 +15,31 @@ type DatabaseConfig struct {
 	SSLMode  string `json:"sslmode"`
 }
 
+type WebhookEventsConfig struct {
+	EmergencySquawk   bool     `json:"emergency_squawk"`
+	AircraftWatchlist []string `json:"aircraft_watchlist"`
+	NewAircraft       bool     `json:"new_aircraft"`
+	HealthAlerts      bool     `json:"health_alerts"`
+}
+
+type HealthThresholdsConfig struct {
+	CPUPercent    int `json:"cpu_percent"`
+	MemoryPercent int `json:"memory_percent"`
+	TempCelsius   int `json:"temp_celsius"`
+}
+
+type WebhookConfig struct {
+	DiscordURL       string                 `json:"discord_url"`
+	Events           WebhookEventsConfig    `json:"events"`
+	HealthThresholds HealthThresholdsConfig `json:"health_thresholds"`
+}
+
+type AutoGainConfig struct {
+	Enabled              bool          `json:"enabled"`
+	TargetMessagesPerSec int           `json:"target_messages_per_sec"`
+	AdjustmentInterval   time.Duration `json:"adjustment_interval"`
+}
+
 type Config struct {
 	SBSHost      string         `json:"sbs_host"`
 	SBSPort      int            `json:"sbs_port"`
@@ -26,6 +51,8 @@ type Config struct {
 	DeviceIndex  int            `json:"device_index"`
 	Database     DatabaseConfig `json:"database"`
 	TrailLength  int            `json:"trail_length"`
+	Webhooks     WebhookConfig  `json:"webhooks"`
+	AutoGain     AutoGainConfig `json:"auto_gain"`
 }
 
 func Default() *Config {
@@ -43,6 +70,22 @@ func Default() *Config {
 			User:    "postgres",
 			DBName:  "adsb",
 			SSLMode: "disable",
+		},
+		Webhooks: WebhookConfig{
+			Events: WebhookEventsConfig{
+				EmergencySquawk: true,
+				HealthAlerts:    true,
+			},
+			HealthThresholds: HealthThresholdsConfig{
+				CPUPercent:    90,
+				MemoryPercent: 90,
+				TempCelsius:   80,
+			},
+		},
+		AutoGain: AutoGainConfig{
+			Enabled:              false,
+			TargetMessagesPerSec: 100,
+			AdjustmentInterval:   5 * time.Minute,
 		},
 	}
 }
@@ -76,6 +119,25 @@ func Load(path string) (*Config, error) {
 			DBName   string `json:"dbname"`
 			SSLMode  string `json:"sslmode"`
 		} `json:"database"`
+		Webhooks struct {
+			DiscordURL string `json:"discord_url"`
+			Events     struct {
+				EmergencySquawk   bool     `json:"emergency_squawk"`
+				AircraftWatchlist []string `json:"aircraft_watchlist"`
+				NewAircraft       bool     `json:"new_aircraft"`
+				HealthAlerts      bool     `json:"health_alerts"`
+			} `json:"events"`
+			HealthThresholds struct {
+				CPUPercent    int `json:"cpu_percent"`
+				MemoryPercent int `json:"memory_percent"`
+				TempCelsius   int `json:"temp_celsius"`
+			} `json:"health_thresholds"`
+		} `json:"webhooks"`
+		AutoGain struct {
+			Enabled              bool   `json:"enabled"`
+			TargetMessagesPerSec int    `json:"target_messages_per_sec"`
+			AdjustmentInterval   string `json:"adjustment_interval"`
+		} `json:"auto_gain"`
 	}
 
 	if err := json.Unmarshal(data, &fileCfg); err != nil {
@@ -129,6 +191,33 @@ func Load(path string) (*Config, error) {
 	}
 	if fileCfg.Database.SSLMode != "" {
 		cfg.Database.SSLMode = fileCfg.Database.SSLMode
+	}
+
+	if fileCfg.Webhooks.DiscordURL != "" {
+		cfg.Webhooks.DiscordURL = fileCfg.Webhooks.DiscordURL
+	}
+	cfg.Webhooks.Events.EmergencySquawk = fileCfg.Webhooks.Events.EmergencySquawk
+	cfg.Webhooks.Events.AircraftWatchlist = fileCfg.Webhooks.Events.AircraftWatchlist
+	cfg.Webhooks.Events.NewAircraft = fileCfg.Webhooks.Events.NewAircraft
+	cfg.Webhooks.Events.HealthAlerts = fileCfg.Webhooks.Events.HealthAlerts
+	if fileCfg.Webhooks.HealthThresholds.CPUPercent != 0 {
+		cfg.Webhooks.HealthThresholds.CPUPercent = fileCfg.Webhooks.HealthThresholds.CPUPercent
+	}
+	if fileCfg.Webhooks.HealthThresholds.MemoryPercent != 0 {
+		cfg.Webhooks.HealthThresholds.MemoryPercent = fileCfg.Webhooks.HealthThresholds.MemoryPercent
+	}
+	if fileCfg.Webhooks.HealthThresholds.TempCelsius != 0 {
+		cfg.Webhooks.HealthThresholds.TempCelsius = fileCfg.Webhooks.HealthThresholds.TempCelsius
+	}
+
+	cfg.AutoGain.Enabled = fileCfg.AutoGain.Enabled
+	if fileCfg.AutoGain.TargetMessagesPerSec != 0 {
+		cfg.AutoGain.TargetMessagesPerSec = fileCfg.AutoGain.TargetMessagesPerSec
+	}
+	if fileCfg.AutoGain.AdjustmentInterval != "" {
+		if d, err := time.ParseDuration(fileCfg.AutoGain.AdjustmentInterval); err == nil {
+			cfg.AutoGain.AdjustmentInterval = d
+		}
 	}
 
 	return cfg, nil

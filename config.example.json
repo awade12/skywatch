@@ -3,8 +3,8 @@
   "sbs_port": 30003,
   "feed_format": "sbs",
   "http_addr": ":8080",
-  "rx_lat": 33.2832237876,
-  "rx_lon": -96.982323223565,
+  "rx_lat": 33.287876,
+  "rx_lon": -96.982565,
   "stale_timeout": "60s",
   "device_index": 0,
   "trail_length": 50,
@@ -15,5 +15,24 @@
     "password": "",
     "dbname": "adsb",
     "sslmode": "disable"
+  },
+  "webhooks": {
+    "discord_url": "",
+    "events": {
+      "emergency_squawk": true,
+      "aircraft_watchlist": ["N12345", "AAL*"],
+      "new_aircraft": false,
+      "health_alerts": true
+    },
+    "health_thresholds": {
+      "cpu_percent": 90,
+      "memory_percent": 90,
+      "temp_celsius": 80
+    }
+  },
+  "auto_gain": {
+    "enabled": false,
+    "target_messages_per_sec": 100,
+    "adjustment_interval": "5m"
   }
 }

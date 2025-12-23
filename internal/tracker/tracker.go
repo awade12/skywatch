@@ -45,6 +45,7 @@ type Tracker struct {
 
 	repo      Repository
 	faaLookup FAALookup
+	webhooks  WebhookDispatcher
 
 	eventsMu    sync.RWMutex
 	subscribers []chan AircraftEvent
@@ -68,6 +69,14 @@ type SearchFilters struct {
 	HasBounds    bool
 }
 
+type WebhookDispatcher interface {
+	SendEmergency(ac *models.Aircraft)
+	SendWatchlistMatch(ac *models.Aircraft, pattern string)
+	SendNewAircraft(ac *models.Aircraft)
+	CheckWatchlist(ac *models.Aircraft) (bool, string)
+	IsEmergencySquawk(squawk string) bool
+}
+
 type Options struct {
 	StaleAfter  time.Duration
 	RxLat       float64
@@ -75,6 +84,7 @@ type Options struct {
 	TrailLength int
 	Repo        Repository
 	FAALookup   FAALookup
+	Webhooks    WebhookDispatcher
 }
 
 func New(opts Options) *Tracker {
@@ -84,6 +94,7 @@ func New(opts Options) *Tracker {
 		trailLength: opts.TrailLength,
 		repo:        opts.Repo,
 		faaLookup:   opts.FAALookup,
+		webhooks:    opts.Webhooks,
 	}
 	if t.trailLength == 0 {
 		t.trailLength = 50
@@ -145,9 +156,11 @@ func (t *Tracker) Update(update *models.Aircraft) {
 		t.saveToRepo(&ac)
 		log.Printf("[TRACKER] Aircraft added: %s", update.ICAO)
 		t.broadcast(AircraftEvent{Type: EventAdd, Aircraft: ac})
+		t.checkWebhookEvents(&ac, true)
 		return
 	}
 
+	oldSquawk := existing.Squawk
 	oldLat := existing.Lat
 	oldLon := existing.Lon
 	oldAlt := existing.AltitudeFt
@@ -181,6 +194,32 @@ func (t *Tracker) Update(update *models.Aircraft) {
 		hasStateChanged(oldHdg, existing.Heading) {
 		t.saveToRepo(existing)
 		t.broadcast(AircraftEvent{Type: EventUpdate, Aircraft: existing.Copy()})
+	}
+
+	if existing.Squawk != oldSquawk {
+		t.checkWebhookEvents(existing, false)
+	}
+}
+
+func (t *Tracker) checkWebhookEvents(ac *models.Aircraft, isNew bool) {
+	if t.webhooks == nil {
+		return
+	}
+
+	acCopy := ac.Copy()
+
+	if isNew {
+		go t.webhooks.SendNewAircraft(&acCopy)
+	}
+
+	if ac.Squawk != "" && t.webhooks.IsEmergencySquawk(ac.Squawk) {
+		log.Printf("[TRACKER] Emergency squawk detected: %s squawking %s", ac.ICAO, ac.Squawk)
+		go t.webhooks.SendEmergency(&acCopy)
+	}
+
+	if matched, pattern := t.webhooks.CheckWatchlist(&acCopy); matched {
+		log.Printf("[TRACKER] Watchlist match: %s matched pattern %s", ac.ICAO, pattern)
+		go t.webhooks.SendWatchlistMatch(&acCopy, pattern)
 	}
 }
 

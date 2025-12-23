@@ -16,8 +16,10 @@ import (
 	"adsb-tracker/internal/config"
 	"adsb-tracker/internal/database"
 	"adsb-tracker/internal/feed"
+	"adsb-tracker/internal/health"
 	"adsb-tracker/internal/lookup"
 	"adsb-tracker/internal/tracker"
+	"adsb-tracker/internal/webhook"
 )
 
 func main() {
@@ -116,6 +118,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var webhookDispatcher *webhook.Dispatcher
+	if cfg.Webhooks.DiscordURL != "" {
+		webhookDispatcher = webhook.NewDispatcher(cfg.Webhooks)
+		go webhookDispatcher.Run(ctx)
+		log.Printf("[MAIN] Webhooks enabled (Discord)")
+	}
+
+	healthMonitor := health.NewMonitor(cfg.Webhooks.HealthThresholds, webhookDispatcher)
+	go healthMonitor.Run(ctx)
+
 	trk := tracker.New(tracker.Options{
 		StaleAfter:  cfg.StaleTimeout,
 		RxLat:       cfg.RxLat,
@@ -123,6 +135,7 @@ func main() {
 		TrailLength: cfg.TrailLength,
 		Repo:        repo,
 		FAALookup:   faaLookup,
+		Webhooks:    webhookDispatcher,
 	})
 	go trk.StartCleanup(ctx)
 
@@ -130,6 +143,9 @@ func main() {
 	go feedClient.Run(ctx)
 
 	server := api.NewServer(trk, repo)
+	server.SetHealthMonitor(healthMonitor)
+	server.SetFeedClient(feedClient)
+	server.SetWebhooks(webhookDispatcher)
 	server.StartHub()
 
 	httpServer := &http.Server{

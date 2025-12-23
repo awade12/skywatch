@@ -8,14 +8,20 @@ import (
 	"time"
 
 	"adsb-tracker/internal/database"
+	"adsb-tracker/internal/feed"
+	"adsb-tracker/internal/health"
 	"adsb-tracker/internal/tracker"
+	"adsb-tracker/internal/webhook"
 )
 
 type Server struct {
-	tracker   *tracker.Tracker
-	repo      *database.Repository
-	startTime time.Time
-	wsHub     *Hub
+	tracker       *tracker.Tracker
+	repo          *database.Repository
+	startTime     time.Time
+	wsHub         *Hub
+	healthMonitor *health.Monitor
+	feedClient    *feed.Client
+	webhooks      *webhook.Dispatcher
 }
 
 func NewServer(t *tracker.Tracker, repo *database.Repository) *Server {
@@ -26,6 +32,18 @@ func NewServer(t *tracker.Tracker, repo *database.Repository) *Server {
 		wsHub:     NewHub(t),
 	}
 	return s
+}
+
+func (s *Server) SetHealthMonitor(h *health.Monitor) {
+	s.healthMonitor = h
+}
+
+func (s *Server) SetFeedClient(f *feed.Client) {
+	s.feedClient = f
+}
+
+func (s *Server) SetWebhooks(w *webhook.Dispatcher) {
+	s.webhooks = w
 }
 
 func (s *Server) Handler() http.Handler {
@@ -44,6 +62,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/stats/altitude", s.handleStatsAltitude)
 	mux.HandleFunc("/api/v1/stats/recent", s.handleStatsRecent)
 	mux.HandleFunc("/api/v1/receiver", s.handleReceiver)
+	mux.HandleFunc("/api/v1/receiver/health", s.handleReceiverHealth)
+	mux.HandleFunc("/api/v1/receiver/feed", s.handleReceiverFeed)
+	mux.HandleFunc("/api/v1/webhooks/test", s.handleWebhookTest)
 
 	mux.HandleFunc("/ws", s.wsHub.HandleWebSocket)
 	mux.Handle("/", http.FileServer(http.Dir("web")))
@@ -466,4 +487,53 @@ func (s *Server) handleStatsRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, aircraft)
+}
+
+func (s *Server) handleReceiverHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.healthMonitor == nil {
+		http.Error(w, "Health monitor not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats := s.healthMonitor.GetStats()
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleReceiverFeed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.feedClient == nil {
+		http.Error(w, "Feed client not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats := s.feedClient.GetStats()
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleWebhookTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.webhooks == nil {
+		http.Error(w, "Webhooks not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := s.webhooks.SendTestWebhook(); err != nil {
+		http.Error(w, "Failed to send test webhook: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Test webhook sent"})
 }
