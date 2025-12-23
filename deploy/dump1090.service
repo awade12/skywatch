@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/dump1090 --device-index 0 --net --net-sbs-port 30003 --quiet
+ExecStart=/usr/bin/dump1090-mutability --device-index 0 --net --net-sbs-port 30003 --quiet
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

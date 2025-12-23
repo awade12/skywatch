@@ -50,7 +50,21 @@ if [ -f "$CONFIG_DIR/config.json" ]; then
     DEVICE_INDEX=$(grep -o '"device_index":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "0")
 fi
 
+DUMP1090_BIN=""
+if [ -x "/usr/bin/dump1090-mutability" ]; then
+    DUMP1090_BIN="/usr/bin/dump1090-mutability"
+elif [ -x "/usr/bin/dump1090" ]; then
+    DUMP1090_BIN="/usr/bin/dump1090"
+elif command -v dump1090-mutability &> /dev/null; then
+    DUMP1090_BIN=$(command -v dump1090-mutability)
+elif command -v dump1090 &> /dev/null; then
+    DUMP1090_BIN=$(command -v dump1090)
+else
+    error "Could not find dump1090 binary!"
+fi
+
 log "  Feed format: $FEED_FORMAT, Port: $SBS_PORT, Device: $DEVICE_INDEX"
+log "  dump1090 binary: $DUMP1090_BIN"
 
 DUMP1090_SERVICE="/etc/systemd/system/dump1090.service"
 
@@ -64,7 +78,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/dump1090 --device-index $DEVICE_INDEX --net --net-bo-port $BEAST_PORT --quiet
+ExecStart=$DUMP1090_BIN --device-index $DEVICE_INDEX --net --net-bo-port $BEAST_PORT --quiet
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -82,7 +96,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/dump1090 --device-index $DEVICE_INDEX --net --net-sbs-port $SBS_PORT --quiet
+ExecStart=$DUMP1090_BIN --device-index $DEVICE_INDEX --net --net-sbs-port $SBS_PORT --quiet
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
