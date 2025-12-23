@@ -36,6 +36,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/aircraft/", s.handleAircraftRoutes)
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
 	mux.HandleFunc("/api/v1/stats", s.handleStats)
+	mux.HandleFunc("/api/v1/stats/hourly", s.handleStatsHourly)
+	mux.HandleFunc("/api/v1/stats/daily", s.handleStatsDaily)
+	mux.HandleFunc("/api/v1/stats/types", s.handleStatsTypes)
+	mux.HandleFunc("/api/v1/stats/operators", s.handleStatsOperators)
+	mux.HandleFunc("/api/v1/stats/overall", s.handleStatsOverall)
+	mux.HandleFunc("/api/v1/stats/altitude", s.handleStatsAltitude)
+	mux.HandleFunc("/api/v1/stats/recent", s.handleStatsRecent)
 	mux.HandleFunc("/api/v1/receiver", s.handleReceiver)
 
 	mux.HandleFunc("/ws", s.wsHub.HandleWebSocket)
@@ -284,4 +291,179 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
+}
+
+func (s *Server) handleStatsHourly(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	hours := 24
+	if h := r.URL.Query().Get("hours"); h != "" {
+		if parsed, err := strconv.Atoi(h); err == nil && parsed > 0 && parsed <= 168 {
+			hours = parsed
+		}
+	}
+
+	stats, err := s.repo.GetHourlyStats(hours)
+	if err != nil {
+		http.Error(w, "Failed to get hourly stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsDaily(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	days := 7
+	if d := r.URL.Query().Get("days"); d != "" {
+		if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 && parsed <= 90 {
+			days = parsed
+		}
+	}
+
+	stats, err := s.repo.GetDailyStats(days)
+	if err != nil {
+		http.Error(w, "Failed to get daily stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsTypes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	limit := 10
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 50 {
+			limit = parsed
+		}
+	}
+
+	stats, err := s.repo.GetTopAircraftTypes(limit)
+	if err != nil {
+		http.Error(w, "Failed to get aircraft type stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsOperators(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	limit := 10
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 50 {
+			limit = parsed
+		}
+	}
+
+	stats, err := s.repo.GetTopOperators(limit)
+	if err != nil {
+		http.Error(w, "Failed to get operator stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsOverall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats, err := s.repo.GetOverallStats()
+	if err != nil {
+		http.Error(w, "Failed to get overall stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsAltitude(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats, err := s.repo.GetAltitudeDistribution()
+	if err != nil {
+		http.Error(w, "Failed to get altitude stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsRecent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+
+	aircraft, err := s.repo.GetRecentAircraft(limit)
+	if err != nil {
+		http.Error(w, "Failed to get recent aircraft", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, aircraft)
 }
