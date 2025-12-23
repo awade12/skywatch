@@ -1,0 +1,18 @@
+[Unit]
+Description=Skywatch ADS-B Tracker
+After=network.target
+
+[Service]
+Type=simple
+User=skywatch
+Group=skywatch
+ExecStart=/opt/skywatch/adsb-tracker -config /etc/skywatch/config.json
+WorkingDirectory=/opt/skywatch
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

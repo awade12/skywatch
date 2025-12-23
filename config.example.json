@@ -1,0 +1,19 @@
+{
+  "sbs_host": "127.0.0.1",
+  "sbs_port": 30003,
+  "feed_format": "sbs",
+  "http_addr": ":8080",
+  "rx_lat": 33.2832237876,
+  "rx_lon": -96.982323223565,
+  "stale_timeout": "60s",
+  "device_index": 0,
+  "trail_length": 50,
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "password": "",
+    "dbname": "adsb",
+    "sslmode": "disable"
+  }
+}
