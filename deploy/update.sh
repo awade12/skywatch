@@ -50,11 +50,13 @@ if [ -f "$CONFIG_DIR/config.json" ]; then
     DEVICE_INDEX=$(grep -o '"device_index":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "0")
 fi
 
+log "  Feed format: $FEED_FORMAT, Port: $SBS_PORT, Device: $DEVICE_INDEX"
+
 DUMP1090_SERVICE="/etc/systemd/system/dump1090.service"
-if [ -f "$DUMP1090_SERVICE" ]; then
-    if [ "$FEED_FORMAT" = "beast" ]; then
-        BEAST_PORT=$(grep -o '"sbs_port":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "30005")
-        cat > "$DUMP1090_SERVICE" << EOF
+
+if [ "$FEED_FORMAT" = "beast" ]; then
+    BEAST_PORT="$SBS_PORT"
+    cat > "$DUMP1090_SERVICE" << EOF
 [Unit]
 Description=dump1090-mutability ADS-B receiver
 After=network.target
@@ -71,8 +73,8 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    else
-        cat > "$DUMP1090_SERVICE" << EOF
+else
+    cat > "$DUMP1090_SERVICE" << EOF
 [Unit]
 Description=dump1090-mutability ADS-B receiver
 After=network.target
@@ -89,10 +91,26 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
-    
-    systemctl daemon-reload
-    systemctl restart dump1090
+fi
+
+if [ -f "$DUMP1090_SERVICE" ]; then
+    log "Created $DUMP1090_SERVICE"
+else
+    error "Failed to create dump1090 service file!"
+fi
+
+systemctl daemon-reload
+systemctl enable dump1090
+
+log "Restarting dump1090..."
+systemctl restart dump1090
+sleep 2
+
+if systemctl is-active --quiet dump1090; then
+    log "dump1090 restarted successfully"
+else
+    warn "dump1090 failed to start! Check: sudo journalctl -u dump1090 -n 20"
+    warn "Make sure an RTL-SDR dongle is connected"
 fi
 
 chown -R skywatch:skywatch "$INSTALL_DIR"
@@ -109,7 +127,24 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Skywatch updated successfully!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "  Status: sudo systemctl status skywatch"
-echo "  Logs:   sudo journalctl -u skywatch -f"
+echo "  Service Status:"
+DUMP_STATUS=$(systemctl is-active dump1090 2>/dev/null || echo "inactive")
+SKY_STATUS=$(systemctl is-active skywatch 2>/dev/null || echo "inactive")
+if [ "$DUMP_STATUS" = "active" ]; then
+    echo -e "    dump1090:  ${GREEN}running${NC}"
+else
+    echo -e "    dump1090:  ${RED}not running${NC} - check RTL-SDR connection"
+fi
+if [ "$SKY_STATUS" = "active" ]; then
+    echo -e "    skywatch:  ${GREEN}running${NC}"
+else
+    echo -e "    skywatch:  ${RED}not running${NC}"
+fi
+echo ""
+echo "  Commands:"
+echo "    sudo systemctl status dump1090    - Check dump1090 status"
+echo "    sudo systemctl status skywatch    - Check skywatch status"
+echo "    sudo journalctl -u dump1090 -f    - View dump1090 logs"
+echo "    sudo journalctl -u skywatch -f    - View skywatch logs"
 echo ""
 

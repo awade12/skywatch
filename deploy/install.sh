@@ -119,7 +119,7 @@ fi
 chown -R skywatch:skywatch "$INSTALL_DIR"
 chown -R skywatch:skywatch "$CONFIG_DIR"
 
-log "Setting up dump1090-mutability service..."
+log "Creating dump1090 systemd service..."
 
 FEED_FORMAT="sbs"
 SBS_PORT=30003
@@ -131,8 +131,31 @@ if [ -f "$CONFIG_DIR/config.json" ]; then
     DEVICE_INDEX=$(grep -o '"device_index":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "0")
 fi
 
+log "  Feed format: $FEED_FORMAT, Port: $SBS_PORT, Device: $DEVICE_INDEX"
+
 DUMP1090_SERVICE="/etc/systemd/system/dump1090.service"
-cat > "$DUMP1090_SERVICE" << EOF
+
+if [ "$FEED_FORMAT" = "beast" ]; then
+    BEAST_PORT="$SBS_PORT"
+    cat > "$DUMP1090_SERVICE" << EOF
+[Unit]
+Description=dump1090-mutability ADS-B receiver
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/dump1090 --device-index $DEVICE_INDEX --net --net-bo-port $BEAST_PORT --quiet
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+else
+    cat > "$DUMP1090_SERVICE" << EOF
 [Unit]
 Description=dump1090-mutability ADS-B receiver
 After=network.target
@@ -149,17 +172,30 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
+fi
 
-if [ "$FEED_FORMAT" = "beast" ]; then
-    BEAST_PORT=$(grep -o '"sbs_port":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "30005")
-    sed -i "s|--net-sbs-port $SBS_PORT|--net-bo-port $BEAST_PORT|" "$DUMP1090_SERVICE"
+if [ -f "$DUMP1090_SERVICE" ]; then
+    log "Created $DUMP1090_SERVICE"
+else
+    error "Failed to create dump1090 service file!"
 fi
 
 systemctl daemon-reload
 systemctl enable dump1090
-systemctl start dump1090
+log "Enabled dump1090 service"
 
-log "Installing Skywatch systemd service..."
+log "Starting dump1090..."
+systemctl start dump1090
+sleep 2
+
+if systemctl is-active --quiet dump1090; then
+    log "dump1090 started successfully"
+else
+    warn "dump1090 failed to start! Check: sudo journalctl -u dump1090 -n 20"
+    warn "Make sure an RTL-SDR dongle is connected"
+fi
+
+log "Creating Skywatch systemd service..."
 cp "$INSTALL_DIR/deploy/skywatch.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable skywatch
@@ -174,13 +210,31 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "  Web UI: http://$(hostname -I | awk '{print $1}'):8080"
 echo ""
+echo "  Service Status:"
+DUMP_STATUS=$(systemctl is-active dump1090 2>/dev/null || echo "inactive")
+SKY_STATUS=$(systemctl is-active skywatch 2>/dev/null || echo "inactive")
+if [ "$DUMP_STATUS" = "active" ]; then
+    echo -e "    dump1090:  ${GREEN}running${NC}"
+else
+    echo -e "    dump1090:  ${RED}not running${NC} - check RTL-SDR connection"
+fi
+if [ "$SKY_STATUS" = "active" ]; then
+    echo -e "    skywatch:  ${GREEN}running${NC}"
+else
+    echo -e "    skywatch:  ${RED}not running${NC}"
+fi
+echo ""
 echo "  Commands:"
-echo "    sudo systemctl status skywatch    - Check status"
-echo "    sudo systemctl restart skywatch   - Restart service"
-echo "    sudo journalctl -u skywatch -f    - View logs"
+echo "    sudo systemctl status dump1090    - Check dump1090 status"
+echo "    sudo systemctl status skywatch    - Check skywatch status"
+echo "    sudo journalctl -u dump1090 -f    - View dump1090 logs"
+echo "    sudo journalctl -u skywatch -f    - View skywatch logs"
 echo ""
 echo "  Config: $CONFIG_DIR/config.json"
 echo ""
 warn "Don't forget to set your receiver coordinates in the config!"
+if [ "$DUMP_STATUS" != "active" ]; then
+    warn "dump1090 is not running! Make sure RTL-SDR dongle is connected."
+fi
 echo ""
 
