@@ -97,6 +97,7 @@ func main() {
 		db, err = database.Connect(dbCfg)
 		if err != nil {
 			log.Printf("[MAIN] Database connection failed: %v (running without persistence)", err)
+			faaLookup = lookup.NewFAALookup(nil)
 		} else {
 			if err := db.Migrate(); err != nil {
 				log.Printf("[MAIN] Database migration failed: %v", err)
