@@ -1,0 +1,16 @@
+[Unit]
+Description=dump1090-mutability ADS-B receiver
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/dump1090 --device-index 0 --net --net-sbs-port 30003 --quiet
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

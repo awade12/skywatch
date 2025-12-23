@@ -63,8 +63,9 @@ sudo ./deploy/install.sh
 ```
 
 The script will:
-- Install RTL-SDR libraries and build dump1090-mutability from source
+- Install RTL-SDR libraries and dump1090-mutability
 - Install Go if needed
+- Set up dump1090-mutability as a systemd service (auto-starts on boot)
 - Build and install Skywatch as a systemd service
 - Set up configuration at `/etc/skywatch/config.json`
 
@@ -72,6 +73,18 @@ After installation, edit `/etc/skywatch/config.json` to set your receiver coordi
 
 ```bash
 sudo systemctl restart skywatch
+```
+
+To update to the latest version:
+
+```bash
+sudo ./deploy/update.sh
+```
+
+Or run the install script again (it will detect and update existing installations):
+
+```bash
+sudo ./deploy/install.sh
 ```
 
 To uninstall:

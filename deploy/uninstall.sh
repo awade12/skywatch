@@ -37,6 +37,16 @@ log "Removing systemd service..."
 rm -f /etc/systemd/system/skywatch.service
 systemctl daemon-reload
 
+read -p "Stop and remove dump1090 service? (y/N) " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    log "Stopping dump1090 service..."
+    systemctl stop dump1090 2>/dev/null || true
+    systemctl disable dump1090 2>/dev/null || true
+    rm -f /etc/systemd/system/dump1090.service
+    systemctl daemon-reload
+fi
+
 log "Removing application files..."
 rm -rf "$INSTALL_DIR"
 

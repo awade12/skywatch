@@ -1,6 +1,7 @@
 [Unit]
 Description=Skywatch ADS-B Tracker
-After=network.target
+After=network.target dump1090.service
+Wants=dump1090.service
 
 [Service]
 Type=simple

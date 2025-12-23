@@ -119,7 +119,47 @@ fi
 chown -R skywatch:skywatch "$INSTALL_DIR"
 chown -R skywatch:skywatch "$CONFIG_DIR"
 
-log "Installing systemd service..."
+log "Setting up dump1090-mutability service..."
+
+FEED_FORMAT="sbs"
+SBS_PORT=30003
+DEVICE_INDEX=0
+
+if [ -f "$CONFIG_DIR/config.json" ]; then
+    FEED_FORMAT=$(grep -o '"feed_format":\s*"[^"]*"' "$CONFIG_DIR/config.json" | cut -d'"' -f4 || echo "sbs")
+    SBS_PORT=$(grep -o '"sbs_port":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "30003")
+    DEVICE_INDEX=$(grep -o '"device_index":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "0")
+fi
+
+DUMP1090_SERVICE="/etc/systemd/system/dump1090.service"
+cat > "$DUMP1090_SERVICE" << EOF
+[Unit]
+Description=dump1090-mutability ADS-B receiver
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/dump1090 --device-index $DEVICE_INDEX --net --net-sbs-port $SBS_PORT --quiet
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+if [ "$FEED_FORMAT" = "beast" ]; then
+    BEAST_PORT=$(grep -o '"sbs_port":\s*[0-9]*' "$CONFIG_DIR/config.json" | grep -o '[0-9]*' || echo "30005")
+    sed -i "s|--net-sbs-port $SBS_PORT|--net-bo-port $BEAST_PORT|" "$DUMP1090_SERVICE"
+fi
+
+systemctl daemon-reload
+systemctl enable dump1090
+systemctl start dump1090
+
+log "Installing Skywatch systemd service..."
 cp "$INSTALL_DIR/deploy/skywatch.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable skywatch
