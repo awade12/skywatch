@@ -75,6 +75,7 @@ log "Setting up Skywatch..."
 
 if [ -d "$INSTALL_DIR/.git" ]; then
     log "Updating existing installation..."
+    git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
     cd "$INSTALL_DIR"
     git fetch origin
     git reset --hard origin/main
@@ -82,6 +83,7 @@ else
     log "Cloning repository..."
     rm -rf "$INSTALL_DIR"
     git clone "$REPO_URL" "$INSTALL_DIR"
+    git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
     cd "$INSTALL_DIR"
 fi
 

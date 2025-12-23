@@ -25,6 +25,7 @@ log "Stopping Skywatch service..."
 systemctl stop skywatch 2>/dev/null || true
 
 log "Updating Skywatch..."
+git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null || true
 cd "$INSTALL_DIR"
 
 if [ -d ".git" ]; then
