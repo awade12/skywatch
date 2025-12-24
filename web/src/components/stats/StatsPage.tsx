@@ -86,10 +86,19 @@ export function StatsPage() {
         if (statsRes.ok) setStats(await statsRes.json())
         if (healthRes.ok) setHealth(await healthRes.json())
         if (feedRes.ok) setFeed(await feedRes.json())
-        if (hourlyRes.ok) setHourly(await hourlyRes.json())
+        if (hourlyRes.ok) {
+          const data = await hourlyRes.json()
+          setHourly(Array.isArray(data) ? data : [])
+        }
         if (altRes.ok) setAltitude(await altRes.json())
-        if (typesRes.ok) setTypes(await typesRes.json())
-        if (opsRes.ok) setOperators(await opsRes.json())
+        if (typesRes.ok) {
+          const data = await typesRes.json()
+          setTypes(Array.isArray(data) ? data : [])
+        }
+        if (opsRes.ok) {
+          const data = await opsRes.json()
+          setOperators(Array.isArray(data) ? data : [])
+        }
       } catch (e) {
         console.error("Failed to fetch stats:", e)
       }
