@@ -21,8 +21,7 @@ interface OverallStats {
 }
 
 interface ReceiverInfo {
-  lat: number
-  lon: number
+  node_name: string
 }
 
 interface HealthStatus {
@@ -266,17 +265,15 @@ export function StatsPage() {
 
           <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
             <div className="flex items-center gap-2 mb-3">
-              <MapPin className="h-4 w-4 text-cyan-500" />
-              <span className="text-sm text-zinc-400">Receiver Location</span>
+              <Radio className="h-4 w-4 text-cyan-500" />
+              <span className="text-sm text-zinc-400">Node</span>
             </div>
-            <div className="font-mono text-white text-lg">
-              {receiver?.lat?.toFixed(4) ?? "-"}°
+            <div className="text-xl font-semibold text-white">
+              {receiver?.node_name ?? "Skywatch Node"}
             </div>
-            <div className="font-mono text-white text-lg">
-              {receiver?.lon?.toFixed(4) ?? "-"}°
-            </div>
-            <div className="mt-3 text-xs text-zinc-500">
-              Max range: {stats?.max_range_icao ?? "-"}
+            <div className="mt-3 flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-zinc-500">Active</span>
             </div>
           </div>
 

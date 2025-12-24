@@ -22,6 +22,7 @@ type Server struct {
 	healthMonitor *health.Monitor
 	feedClient    *feed.Client
 	webhooks      *webhook.Dispatcher
+	nodeName      string
 }
 
 func NewServer(t *tracker.Tracker, repo *database.Repository) *Server {
@@ -44,6 +45,10 @@ func (s *Server) SetFeedClient(f *feed.Client) {
 
 func (s *Server) SetWebhooks(w *webhook.Dispatcher) {
 	s.webhooks = w
+}
+
+func (s *Server) SetNodeName(name string) {
+	s.nodeName = name
 }
 
 func (s *Server) Handler() http.Handler {
@@ -241,8 +246,7 @@ func (s *Server) handleAircraftSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 type receiverResponse struct {
-	Lat float64 `json:"lat,omitempty"`
-	Lon float64 `json:"lon,omitempty"`
+	NodeName string `json:"node_name"`
 }
 
 func (s *Server) handleReceiver(w http.ResponseWriter, r *http.Request) {
@@ -251,15 +255,8 @@ func (s *Server) handleReceiver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info := s.tracker.GetReceiverInfo()
-	if info == nil {
-		writeJSON(w, http.StatusOK, receiverResponse{})
-		return
-	}
-
 	writeJSON(w, http.StatusOK, receiverResponse{
-		Lat: info.Lat,
-		Lon: info.Lon,
+		NodeName: s.nodeName,
 	})
 }
 

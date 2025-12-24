@@ -144,6 +144,7 @@ Create a `config.json`:
 | `sbs_port` | Port (30003 for SBS, 30005 for Beast) |
 | `feed_format` | `sbs` or `beast` |
 | `rx_lat/rx_lon` | Receiver location for distance calculation |
+| `node_name` | Display name for this receiver node (e.g., "Master Node", "Alex's Node") |
 | `stale_timeout` | Remove aircraft not seen after this duration |
 | `trail_length` | Number of positions to keep per aircraft |
 | `webhooks.discord_url` | Discord webhook URL for notifications |

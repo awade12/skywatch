@@ -5,6 +5,7 @@
   "http_addr": ":8080",
   "rx_lat": 33.287876,
   "rx_lon": -96.982565,
+  "node_name": "Master Node",
   "stale_timeout": "60s",
   "device_index": 0,
   "trail_length": 50,

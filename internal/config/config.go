@@ -47,6 +47,7 @@ type Config struct {
 	HTTPAddr     string         `json:"http_addr"`
 	RxLat        float64        `json:"rx_lat"`
 	RxLon        float64        `json:"rx_lon"`
+	NodeName     string         `json:"node_name"`
 	StaleTimeout time.Duration  `json:"stale_timeout"`
 	DeviceIndex  int            `json:"device_index"`
 	Database     DatabaseConfig `json:"database"`
@@ -61,6 +62,7 @@ func Default() *Config {
 		SBSPort:      30003,
 		FeedFormat:   "sbs",
 		HTTPAddr:     ":8080",
+		NodeName:     "Skywatch Node",
 		StaleTimeout: 60 * time.Second,
 		DeviceIndex:  0,
 		TrailLength:  50,
@@ -108,6 +110,7 @@ func Load(path string) (*Config, error) {
 		HTTPAddr     string  `json:"http_addr"`
 		RxLat        float64 `json:"rx_lat"`
 		RxLon        float64 `json:"rx_lon"`
+		NodeName     string  `json:"node_name"`
 		StaleTimeout string  `json:"stale_timeout"`
 		DeviceIndex  int     `json:"device_index"`
 		TrailLength  int     `json:"trail_length"`
@@ -161,6 +164,9 @@ func Load(path string) (*Config, error) {
 	}
 	if fileCfg.RxLon != 0 {
 		cfg.RxLon = fileCfg.RxLon
+	}
+	if fileCfg.NodeName != "" {
+		cfg.NodeName = fileCfg.NodeName
 	}
 	if fileCfg.StaleTimeout != "" {
 		if d, err := time.ParseDuration(fileCfg.StaleTimeout); err == nil {

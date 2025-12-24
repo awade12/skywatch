@@ -146,6 +146,7 @@ func main() {
 	server.SetHealthMonitor(healthMonitor)
 	server.SetFeedClient(feedClient)
 	server.SetWebhooks(webhookDispatcher)
+	server.SetNodeName(cfg.NodeName)
 	server.StartHub()
 
 	httpServer := &http.Server{
