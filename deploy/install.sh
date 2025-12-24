@@ -85,6 +85,17 @@ else
     cd "$INSTALL_DIR"
 fi
 
+log "Installing Node.js if needed..."
+if ! command -v node &> /dev/null; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y -qq nodejs
+fi
+
+log "Building web frontend..."
+cd "$INSTALL_DIR/web"
+npm install --silent
+npm run build
+
 log "Building Skywatch..."
 cd "$INSTALL_DIR"
 export PATH=$PATH:/usr/local/go/bin

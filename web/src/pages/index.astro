@@ -1,0 +1,80 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Skywatch - ADS-B Tracker">
+	<div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+		<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMtOS45NDEgMC0xOCA4LjA1OS0xOCAxOHM4LjA1OSAxOCAxOCAxOCAxOC04LjA1OSAxOC0xOC04LjA1OS0xOC0xOC0xOHptMCAzMmMtNy43MzIgMC0xNC02LjI2OC0xNC0xNHM2LjI2OC0xNCAxNC0xNCAxNCA2LjI2OCAxNCAxNC02LjI2OCAxNC0xNCAxNHoiIHN0cm9rZT0iIzFmMjkzNyIgc3Ryb2tlLXdpZHRoPSIuNSIvPjwvZz48L3N2Zz4=')] opacity-20"></div>
+		
+		<div class="relative z-10 text-center px-6">
+			<div class="inline-flex items-center justify-center p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 mb-6">
+				<svg class="h-12 w-12 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+				</svg>
+			</div>
+			
+			<h1 class="text-4xl md:text-5xl font-semibold text-white tracking-tight mb-3">Skywatch</h1>
+			<p class="text-slate-400 text-lg mb-10 max-w-md mx-auto">Real-time ADS-B aircraft tracking and monitoring</p>
+			
+			<div class="flex flex-col sm:flex-row gap-4 justify-center">
+				<a href="/stats" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-medium transition-colors">
+					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+					</svg>
+					Statistics
+				</a>
+				<a href="/map" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium border border-slate-700 transition-colors">
+					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+					</svg>
+					Live Map
+				</a>
+			</div>
+			
+			<div class="mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto">
+				<div class="text-center">
+					<div class="text-2xl font-semibold text-white font-mono" id="aircraft-count">-</div>
+					<div class="text-xs text-slate-500 mt-1">Aircraft</div>
+				</div>
+				<div class="text-center">
+					<div class="text-2xl font-semibold text-white font-mono" id="message-rate">-</div>
+					<div class="text-xs text-slate-500 mt-1">Msg/sec</div>
+				</div>
+				<div class="text-center">
+					<div class="text-2xl font-semibold text-white font-mono" id="uptime">-</div>
+					<div class="text-xs text-slate-500 mt-1">Uptime</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</Layout>
+
+<script>
+	async function updateStats() {
+		try {
+			const [statsRes, feedRes] = await Promise.all([
+				fetch('/api/v1/stats'),
+				fetch('/api/v1/receiver/feed')
+			]);
+			
+			if (statsRes.ok) {
+				const stats = await statsRes.json();
+				const el = document.getElementById('aircraft-count');
+				if (el) el.textContent = stats.aircraft_now?.toString() ?? '-';
+				const upEl = document.getElementById('uptime');
+				if (upEl) upEl.textContent = stats.uptime ?? '-';
+			}
+			
+			if (feedRes.ok) {
+				const feed = await feedRes.json();
+				const el = document.getElementById('message-rate');
+				if (el) el.textContent = feed.messages_per_sec?.toFixed(1) ?? '-';
+			}
+		} catch (e) {
+			console.error('Failed to fetch stats:', e);
+		}
+	}
+	
+	updateStats();
+	setInterval(updateStats, 3000);
+</script>

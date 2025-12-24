@@ -67,7 +67,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/webhooks/test", s.handleWebhookTest)
 
 	mux.HandleFunc("/ws", s.wsHub.HandleWebSocket)
-	mux.Handle("/", http.FileServer(http.Dir("web")))
+	mux.Handle("/", http.FileServer(http.Dir("web/dist")))
 	return mux
 }
 
