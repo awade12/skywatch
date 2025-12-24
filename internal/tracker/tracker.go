@@ -401,7 +401,7 @@ func (t *Tracker) GetTrail(icao string) ([]models.Position, error) {
 	if t.repo != nil {
 		return t.repo.GetPositionHistory(icao, t.trailLength)
 	}
-	return nil, nil
+	return []models.Position{}, nil
 }
 
 func (t *Tracker) GetAll() []models.Aircraft {

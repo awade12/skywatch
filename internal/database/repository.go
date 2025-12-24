@@ -87,18 +87,18 @@ func (r *Repository) GetPositionHistory(icao string, limit int) ([]models.Positi
 
 	rows, err := r.db.Query(query, icao, limit)
 	if err != nil {
-		return nil, err
+		return []models.Position{}, err
 	}
 	defer rows.Close()
 
-	var positions []models.Position
+	positions := []models.Position{}
 	for rows.Next() {
 		var p models.Position
 		var altFt sql.NullInt64
 		var speedKt, heading sql.NullFloat64
 
 		if err := rows.Scan(&p.Lat, &p.Lon, &altFt, &speedKt, &heading, &p.Timestamp); err != nil {
-			return nil, err
+			return []models.Position{}, err
 		}
 
 		if altFt.Valid {
@@ -155,18 +155,18 @@ func (r *Repository) GetPositionHistoryTimeRange(icao string, from, to *time.Tim
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return []models.Position{}, err
 	}
 	defer rows.Close()
 
-	var positions []models.Position
+	positions := []models.Position{}
 	for rows.Next() {
 		var p models.Position
 		var altFt sql.NullInt64
 		var speedKt, heading sql.NullFloat64
 
 		if err := rows.Scan(&p.Lat, &p.Lon, &altFt, &speedKt, &heading, &p.Timestamp); err != nil {
-			return nil, err
+			return []models.Position{}, err
 		}
 
 		if altFt.Valid {
@@ -280,15 +280,15 @@ func (r *Repository) GetHourlyStats(hours int) ([]HourlyStats, error) {
 
 	rows, err := r.db.Query(query, hours)
 	if err != nil {
-		return nil, err
+		return []HourlyStats{}, err
 	}
 	defer rows.Close()
 
-	var stats []HourlyStats
+	stats := []HourlyStats{}
 	for rows.Next() {
 		var s HourlyStats
 		if err := rows.Scan(&s.Hour, &s.Count); err != nil {
-			return nil, err
+			return []HourlyStats{}, err
 		}
 		stats = append(stats, s)
 	}
@@ -309,15 +309,15 @@ func (r *Repository) GetDailyStats(days int) ([]DailyStats, error) {
 
 	rows, err := r.db.Query(query, days)
 	if err != nil {
-		return nil, err
+		return []DailyStats{}, err
 	}
 	defer rows.Close()
 
-	var stats []DailyStats
+	stats := []DailyStats{}
 	for rows.Next() {
 		var s DailyStats
 		if err := rows.Scan(&s.Date, &s.UniqueAircraft, &s.TotalPositions); err != nil {
-			return nil, err
+			return []DailyStats{}, err
 		}
 		stats = append(stats, s)
 	}
@@ -338,15 +338,15 @@ func (r *Repository) GetTopAircraftTypes(limit int) ([]AircraftTypeStats, error)
 
 	rows, err := r.db.Query(query, limit)
 	if err != nil {
-		return nil, err
+		return []AircraftTypeStats{}, err
 	}
 	defer rows.Close()
 
-	var stats []AircraftTypeStats
+	stats := []AircraftTypeStats{}
 	for rows.Next() {
 		var s AircraftTypeStats
 		if err := rows.Scan(&s.AircraftType, &s.Count); err != nil {
-			return nil, err
+			return []AircraftTypeStats{}, err
 		}
 		stats = append(stats, s)
 	}
@@ -367,15 +367,15 @@ func (r *Repository) GetTopOperators(limit int) ([]OperatorStats, error) {
 
 	rows, err := r.db.Query(query, limit)
 	if err != nil {
-		return nil, err
+		return []OperatorStats{}, err
 	}
 	defer rows.Close()
 
-	var stats []OperatorStats
+	stats := []OperatorStats{}
 	for rows.Next() {
 		var s OperatorStats
 		if err := rows.Scan(&s.Operator, &s.Count); err != nil {
-			return nil, err
+			return []OperatorStats{}, err
 		}
 		stats = append(stats, s)
 	}
@@ -426,11 +426,11 @@ func (r *Repository) GetRecentAircraft(limit int) ([]models.Aircraft, error) {
 
 	rows, err := r.db.Query(query, limit)
 	if err != nil {
-		return nil, err
+		return []models.Aircraft{}, err
 	}
 	defer rows.Close()
 
-	var aircraft []models.Aircraft
+	aircraft := []models.Aircraft{}
 	for rows.Next() {
 		var ac models.Aircraft
 		var callsign, squawk, reg, acType, operator sql.NullString
@@ -441,7 +441,7 @@ func (r *Repository) GetRecentAircraft(limit int) ([]models.Aircraft, error) {
 		err := rows.Scan(&ac.ICAO, &callsign, &lat, &lon, &altFt, &speedKt, &heading,
 			&squawk, &onGround, &ac.LastSeen, &reg, &acType, &operator)
 		if err != nil {
-			return nil, err
+			return []models.Aircraft{}, err
 		}
 
 		ac.Callsign = callsign.String

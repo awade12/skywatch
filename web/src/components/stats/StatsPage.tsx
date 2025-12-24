@@ -484,7 +484,7 @@ export function StatsPage() {
                   </div>
                 </div>
               )) : (
-                <div className="text-center text-zinc-600 py-4">No operator data (requires database)</div>
+                <div className="text-center text-zinc-600 py-4">No operator data yet</div>
               )}
             </div>
           </div>
