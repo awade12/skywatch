@@ -89,7 +89,7 @@ sudo ./deploy/update.sh
 Or run the install script again (it will detect and update existing installations):
 
 ```bash
-sudo ./deploy/install.sh
+sudo /opt/skywatch/deploy/update.sh
 ```
 
 To uninstall:

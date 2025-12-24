@@ -34,7 +34,13 @@ else
     error "Not a git repository. Cannot update."
 fi
 
+log "Building web frontend..."
+cd "$INSTALL_DIR/web"
+npm install --silent
+npm run build
+
 log "Building Skywatch..."
+cd "$INSTALL_DIR"
 export PATH=$PATH:/usr/local/go/bin
 go build -o adsb-tracker .
 
