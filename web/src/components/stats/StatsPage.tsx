@@ -74,13 +74,14 @@ interface OperatorStat {
 interface Aircraft {
   icao: string
   callsign?: string
-  altitude?: number
-  speed?: number
+  alt_ft?: number
+  speed_kt?: number
   heading?: number
   lat?: number
   lon?: number
   distance_nm?: number
   bearing?: number
+  bearing_cardinal?: string
   squawk?: string
   registration?: string
   aircraft_type?: string
@@ -424,12 +425,12 @@ export function StatsPage() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-sm text-white font-mono">
-                        {a.on_ground ? "GND" : a.altitude?.toLocaleString() ?? "-"}
+                        {a.on_ground ? "GND" : a.alt_ft?.toLocaleString() ?? "-"}
                       </div>
                       <div className="text-xs text-zinc-500">ft</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="text-sm text-white font-mono">{a.speed ?? "-"}</div>
+                      <div className="text-sm text-white font-mono">{a.speed_kt ?? "-"}</div>
                       <div className="text-xs text-zinc-500">kts</div>
                     </td>
                     <td className="py-3 px-3">
