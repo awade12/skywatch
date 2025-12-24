@@ -41,6 +41,17 @@ interface ReceiverHealth {
   platform: string
 }
 
+interface MessageTypeStats {
+  msg1_id: number
+  msg2_surface: number
+  msg3_airborne: number
+  msg4_velocity: number
+  msg5_surv_alt: number
+  msg6_surv_id: number
+  msg7_air2air: number
+  msg8_allcall: number
+}
+
 interface FeedStatus {
   connected: boolean
   last_message: string
@@ -50,6 +61,51 @@ interface FeedStatus {
   host: string
   port: number
   format: string
+  valid_messages: number
+  invalid_messages: number
+  position_messages: number
+  velocity_messages: number
+  message_types: MessageTypeStats
+}
+
+interface RangeBucket {
+  bearing: number
+  max_range_nm: number
+  max_range_icao: string
+  contact_count: number
+}
+
+interface RangeStats {
+  buckets: RangeBucket[]
+  all_time_max_nm: number
+  all_time_max_icao: string
+  total_contacts: number
+}
+
+interface PeakStats {
+  busiest_hour: string
+  busiest_hour_count: number
+  busiest_day: string
+  busiest_day_count: number
+  avg_aircraft_per_hour: number
+  total_hours_tracked: number
+}
+
+interface FlightRecord {
+  id: number
+  icao: string
+  callsign?: string
+  registration?: string
+  aircraft_type?: string
+  first_seen: string
+  last_seen: string
+  first_lat?: number
+  first_lon?: number
+  last_lat?: number
+  last_lon?: number
+  max_alt_ft?: number
+  total_dist_nm: number
+  completed: boolean
 }
 
 interface HourlyStat {
@@ -146,6 +202,9 @@ export function StatsPage() {
   const [operators, setOperators] = useState<OperatorStat[]>([])
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [recent, setRecent] = useState<RecentAircraft[]>([])
+  const [rangeStats, setRangeStats] = useState<RangeStats | null>(null)
+  const [peakStats, setPeakStats] = useState<PeakStats | null>(null)
+  const [flights, setFlights] = useState<FlightRecord[]>([])
   const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
@@ -159,6 +218,8 @@ export function StatsPage() {
           { url: "/api/v1/receiver/health", setter: setHealth },
           { url: "/api/v1/receiver/feed", setter: setFeed },
           { url: "/api/v1/stats/altitude", setter: setAltitude },
+          { url: "/api/v1/stats/range", setter: setRangeStats },
+          { url: "/api/v1/stats/peak", setter: setPeakStats },
         ]
 
         const arrayEndpoints = [
@@ -168,6 +229,7 @@ export function StatsPage() {
           { url: "/api/v1/stats/operators?limit=10", setter: setOperators },
           { url: "/api/v1/aircraft", setter: setAircraft },
           { url: "/api/v1/stats/recent?limit=50", setter: setRecent },
+          { url: "/api/v1/flights?limit=20", setter: setFlights },
         ]
 
         await Promise.all([
@@ -300,6 +362,99 @@ export function StatsPage() {
               <DbStat label="FAA Records" value={overall.total_faa_records} icon={<Layers className="h-4 w-4" />} />
               <DbStat label="Positions (24h)" value={overall.positions_last_24h} icon={<Clock className="h-4 w-4" />} />
               <DbStat label="Aircraft (24h)" value={overall.aircraft_last_24h} icon={<TrendingUp className="h-4 w-4" />} />
+            </div>
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-2 gap-4 mb-6">
+          {peakStats && (
+            <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="h-4 w-4 text-yellow-500" />
+                <span className="text-sm font-medium text-zinc-300">Peak Activity</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Busiest Hour</div>
+                  <div className="text-xl font-bold text-white">{peakStats.busiest_hour_count}</div>
+                  <div className="text-xs text-zinc-500">{peakStats.busiest_hour ? new Date(peakStats.busiest_hour).toLocaleString() : "-"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Busiest Day</div>
+                  <div className="text-xl font-bold text-white">{peakStats.busiest_day_count}</div>
+                  <div className="text-xs text-zinc-500">{peakStats.busiest_day || "-"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Avg Aircraft/Hour</div>
+                  <div className="text-lg font-mono text-white">{peakStats.avg_aircraft_per_hour?.toFixed(1) ?? "0"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Hours Tracked</div>
+                  <div className="text-lg font-mono text-white">{peakStats.total_hours_tracked ?? 0}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {rangeStats && (
+            <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="flex items-center gap-2 mb-4">
+                <Radar className="h-4 w-4 text-cyan-500" />
+                <span className="text-sm font-medium text-zinc-300">Range Coverage</span>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="flex-1">
+                  <div className="text-xs text-zinc-500 mb-1">All-Time Max Range</div>
+                  <div className="text-3xl font-bold text-cyan-400">{rangeStats.all_time_max_nm?.toFixed(1) ?? "0"}<span className="text-sm text-zinc-500 ml-1">nm</span></div>
+                  <div className="text-xs text-zinc-500 mt-1">ICAO: {rangeStats.all_time_max_icao || "-"}</div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-xs text-zinc-500 mb-1">Total Contacts</div>
+                  <div className="text-2xl font-bold text-white">{rangeStats.total_contacts?.toLocaleString() ?? "0"}</div>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-6 gap-1">
+                {rangeStats.buckets?.slice(0, 36).map((b, i) => (
+                  <div key={i} className="text-center">
+                    <div className="h-8 rounded flex items-end justify-center" style={{ backgroundColor: COLORS.bg }}>
+                      <div
+                        className="w-full rounded"
+                        style={{
+                          height: `${Math.min((b.max_range_nm / (rangeStats.all_time_max_nm || 1)) * 100, 100)}%`,
+                          backgroundColor: b.max_range_nm > 0 ? COLORS.cyan : COLORS.textDim,
+                          minHeight: b.max_range_nm > 0 ? "2px" : "0"
+                        }}
+                      />
+                    </div>
+                    <div className="text-[8px] text-zinc-600 mt-1">{b.bearing}°</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {feed?.message_types && (
+          <div className="rounded-2xl p-5 mb-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium text-zinc-300">Message Types</span>
+            </div>
+            <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+              <MsgTypeStat label="MSG1" sublabel="ID" value={feed.message_types.msg1_id} />
+              <MsgTypeStat label="MSG2" sublabel="Surface" value={feed.message_types.msg2_surface} />
+              <MsgTypeStat label="MSG3" sublabel="Airborne" value={feed.message_types.msg3_airborne} color={COLORS.cyan} />
+              <MsgTypeStat label="MSG4" sublabel="Velocity" value={feed.message_types.msg4_velocity} color={COLORS.green} />
+              <MsgTypeStat label="MSG5" sublabel="Surv Alt" value={feed.message_types.msg5_surv_alt} />
+              <MsgTypeStat label="MSG6" sublabel="Surv ID" value={feed.message_types.msg6_surv_id} />
+              <MsgTypeStat label="MSG7" sublabel="Air2Air" value={feed.message_types.msg7_air2air} />
+              <MsgTypeStat label="MSG8" sublabel="AllCall" value={feed.message_types.msg8_allcall} />
+            </div>
+            <div className="mt-4 flex gap-6 text-xs">
+              <div><span className="text-zinc-500">Valid:</span> <span className="text-green-400 font-mono">{feed.valid_messages?.toLocaleString()}</span></div>
+              <div><span className="text-zinc-500">Invalid:</span> <span className="text-red-400 font-mono">{feed.invalid_messages?.toLocaleString()}</span></div>
+              <div><span className="text-zinc-500">Position:</span> <span className="text-cyan-400 font-mono">{feed.position_messages?.toLocaleString()}</span></div>
+              <div><span className="text-zinc-500">Velocity:</span> <span className="text-green-400 font-mono">{feed.velocity_messages?.toLocaleString()}</span></div>
             </div>
           </div>
         )}
@@ -557,6 +712,47 @@ export function StatsPage() {
           </div>
         </div>
 
+        {flights.length > 0 && (
+          <div className="rounded-2xl p-5 mb-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Navigation className="h-4 w-4 text-green-500" />
+              <span className="text-sm font-medium text-zinc-300">Completed Flights ({flights.length})</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-500 text-xs">
+                    <th className="text-left py-2 px-2 font-medium">Callsign</th>
+                    <th className="text-left py-2 px-2 font-medium">Registration</th>
+                    <th className="text-left py-2 px-2 font-medium">Type</th>
+                    <th className="text-right py-2 px-2 font-medium">Max Alt</th>
+                    <th className="text-right py-2 px-2 font-medium">Distance</th>
+                    <th className="text-right py-2 px-2 font-medium">Duration</th>
+                    <th className="text-left py-2 px-2 font-medium">Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flights.slice(0, 10).map((f) => {
+                    const duration = new Date(f.last_seen).getTime() - new Date(f.first_seen).getTime()
+                    const mins = Math.floor(duration / 60000)
+                    return (
+                      <tr key={f.id} style={{ borderBottom: `1px solid ${COLORS.bg}` }} className="hover:bg-white/[0.02]">
+                        <td className="py-2 px-2 font-mono text-white">{f.callsign || f.icao}</td>
+                        <td className="py-2 px-2 text-zinc-400">{f.registration || "-"}</td>
+                        <td className="py-2 px-2 font-mono text-zinc-400">{f.aircraft_type || "-"}</td>
+                        <td className="py-2 px-2 text-right font-mono text-white">{f.max_alt_ft?.toLocaleString() ?? "-"}</td>
+                        <td className="py-2 px-2 text-right font-mono" style={{ color: COLORS.cyan }}>{f.total_dist_nm?.toFixed(1) ?? "-"} nm</td>
+                        <td className="py-2 px-2 text-right font-mono text-zinc-400">{mins}m</td>
+                        <td className="py-2 px-2 text-zinc-500 text-xs">{new Date(f.last_seen).toLocaleTimeString()}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
           <div className="text-sm font-medium text-zinc-300 mb-4">Recently Seen ({recent.length})</div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -601,6 +797,16 @@ function HealthBar({ label, value, suffix }: { label: string; value: number; suf
       <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
         <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(value, 100)}%`, backgroundColor: color }} />
       </div>
+    </div>
+  )
+}
+
+function MsgTypeStat({ label, sublabel, value, color = COLORS.textMuted }: { label: string; sublabel: string; value: number; color?: string }) {
+  return (
+    <div className="text-center p-2 rounded-lg" style={{ backgroundColor: COLORS.bg }}>
+      <div className="text-xs font-bold" style={{ color }}>{label}</div>
+      <div className="text-[10px] text-zinc-600 mb-1">{sublabel}</div>
+      <div className="font-mono text-sm text-white">{value?.toLocaleString() ?? "0"}</div>
     </div>
   )
 }

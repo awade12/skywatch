@@ -9,19 +9,93 @@ import (
 )
 
 const (
-	idxMessageType = 0
-	idxICAO        = 4
-	idxCallsign    = 10 
-	idxAltitude    = 11
-	idxGroundSpeed = 12 
-	idxHeading     = 13
-	idxLatitude    = 14
-	idxLongitude   = 15
-	idxVertRate    = 16
-	idxSquawk      = 17
-	idxOnGround    = 21
-	minFields      = 22
+	idxMessageType    = 0
+	idxMessageSubtype = 1
+	idxICAO           = 4
+	idxCallsign       = 10
+	idxAltitude       = 11
+	idxGroundSpeed    = 12
+	idxHeading        = 13
+	idxLatitude       = 14
+	idxLongitude      = 15
+	idxVertRate       = 16
+	idxSquawk         = 17
+	idxOnGround       = 21
+	minFields         = 22
 )
+
+type ParseResult struct {
+	Aircraft    *models.Aircraft
+	MessageType int
+	Valid       bool
+}
+
+func ParseMessageWithType(line string) ParseResult {
+	result := ParseResult{}
+
+	fields := strings.Split(line, ",")
+	if len(fields) < minFields {
+		return result
+	}
+
+	if fields[idxMessageType] != "MSG" {
+		return result
+	}
+
+	if subtype, err := strconv.Atoi(strings.TrimSpace(fields[idxMessageSubtype])); err == nil {
+		result.MessageType = subtype
+	}
+
+	icao := strings.TrimSpace(fields[idxICAO])
+	if icao == "" {
+		return result
+	}
+
+	result.Valid = true
+	ac := &models.Aircraft{
+		ICAO:     strings.ToUpper(icao),
+		LastSeen: time.Now().UTC(),
+	}
+
+	if cs := strings.TrimSpace(fields[idxCallsign]); cs != "" {
+		ac.Callsign = cs
+	}
+
+	if alt := parseInt(fields[idxAltitude]); alt != nil {
+		ac.AltitudeFt = alt
+	}
+
+	if spd := parseFloat(fields[idxGroundSpeed]); spd != nil {
+		ac.SpeedKt = spd
+	}
+
+	if hdg := parseFloat(fields[idxHeading]); hdg != nil {
+		ac.Heading = hdg
+	}
+
+	if lat := parseFloat(fields[idxLatitude]); lat != nil {
+		ac.Lat = lat
+	}
+
+	if lon := parseFloat(fields[idxLongitude]); lon != nil {
+		ac.Lon = lon
+	}
+
+	if vr := parseInt(fields[idxVertRate]); vr != nil {
+		ac.VerticalRate = vr
+	}
+
+	if sq := strings.TrimSpace(fields[idxSquawk]); sq != "" {
+		ac.Squawk = sq
+	}
+
+	if og := parseBool(fields[idxOnGround]); og != nil {
+		ac.OnGround = og
+	}
+
+	result.Aircraft = ac
+	return result
+}
 
 func ParseMessage(line string) *models.Aircraft {
 	fields := strings.Split(line, ",")

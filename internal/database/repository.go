@@ -510,3 +510,302 @@ func (r *Repository) GetAltitudeDistribution() (map[string]int, error) {
 	return dist, rows.Err()
 }
 
+type SessionStats struct {
+	TotalSeen    int       `json:"total_seen"`
+	MaxRangeNM   float64   `json:"max_range_nm"`
+	MaxRangeICAO string    `json:"max_range_icao"`
+	SessionStart time.Time `json:"session_start"`
+	LastSave     time.Time `json:"last_save"`
+}
+
+func (r *Repository) SaveSessionStats(stats *SessionStats) error {
+	query := `
+		INSERT INTO session_stats (id, total_seen, max_range_nm, max_range_icao, session_start, last_save)
+		VALUES (1, $1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET
+			total_seen = $1,
+			max_range_nm = $2,
+			max_range_icao = $3,
+			last_save = $5
+	`
+	_, err := r.db.Exec(query, stats.TotalSeen, stats.MaxRangeNM, stats.MaxRangeICAO, stats.SessionStart, time.Now())
+	return err
+}
+
+func (r *Repository) LoadSessionStats() (*SessionStats, error) {
+	query := `SELECT total_seen, max_range_nm, max_range_icao, session_start, last_save FROM session_stats WHERE id = 1`
+
+	var stats SessionStats
+	var maxRangeICAO sql.NullString
+
+	err := r.db.QueryRow(query).Scan(&stats.TotalSeen, &stats.MaxRangeNM, &maxRangeICAO, &stats.SessionStart, &stats.LastSave)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	stats.MaxRangeICAO = maxRangeICAO.String
+	return &stats, nil
+}
+
+type RangeBucketStats struct {
+	Bearing      int     `json:"bearing"`
+	MaxRangeNM   float64 `json:"max_range_nm"`
+	MaxRangeICAO string  `json:"max_range_icao"`
+	ContactCount int64   `json:"contact_count"`
+}
+
+func (r *Repository) SaveRangeStats(bucket int, maxNM float64, icao string, count int64) error {
+	query := `
+		INSERT INTO range_stats (bearing_bucket, max_range_nm, max_range_icao, contact_count, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (bearing_bucket) DO UPDATE SET
+			max_range_nm = GREATEST(range_stats.max_range_nm, $2),
+			max_range_icao = CASE WHEN $2 > range_stats.max_range_nm THEN $3 ELSE range_stats.max_range_icao END,
+			contact_count = $4,
+			updated_at = NOW()
+	`
+	_, err := r.db.Exec(query, bucket, maxNM, icao, count)
+	return err
+}
+
+func (r *Repository) LoadRangeStats() ([]RangeBucketStats, error) {
+	query := `SELECT bearing_bucket, max_range_nm, COALESCE(max_range_icao, ''), contact_count FROM range_stats ORDER BY bearing_bucket`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return []RangeBucketStats{}, err
+	}
+	defer rows.Close()
+
+	stats := []RangeBucketStats{}
+	for rows.Next() {
+		var s RangeBucketStats
+		if err := rows.Scan(&s.Bearing, &s.MaxRangeNM, &s.MaxRangeICAO, &s.ContactCount); err != nil {
+			return []RangeBucketStats{}, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
+}
+
+type FlightRecord struct {
+	ID           int64     `json:"id"`
+	ICAO         string    `json:"icao"`
+	Callsign     string    `json:"callsign,omitempty"`
+	Registration string    `json:"registration,omitempty"`
+	AircraftType string    `json:"aircraft_type,omitempty"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	FirstLat     *float64  `json:"first_lat,omitempty"`
+	FirstLon     *float64  `json:"first_lon,omitempty"`
+	LastLat      *float64  `json:"last_lat,omitempty"`
+	LastLon      *float64  `json:"last_lon,omitempty"`
+	MaxAltFt     *int      `json:"max_alt_ft,omitempty"`
+	TotalDistNM  float64   `json:"total_dist_nm"`
+	Completed    bool      `json:"completed"`
+}
+
+func (r *Repository) CreateFlight(flight *FlightRecord) (int64, error) {
+	query := `
+		INSERT INTO flights (icao, callsign, registration, aircraft_type, first_seen, last_seen, first_lat, first_lon, last_lat, last_lon, max_alt_ft, total_dist_nm, completed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING id
+	`
+	var id int64
+	err := r.db.QueryRow(query,
+		flight.ICAO, flight.Callsign, flight.Registration, flight.AircraftType,
+		flight.FirstSeen, flight.LastSeen,
+		flight.FirstLat, flight.FirstLon, flight.LastLat, flight.LastLon,
+		flight.MaxAltFt, flight.TotalDistNM, flight.Completed,
+	).Scan(&id)
+	return id, err
+}
+
+func (r *Repository) UpdateFlight(flight *FlightRecord) error {
+	query := `
+		UPDATE flights SET
+			callsign = COALESCE(NULLIF($2, ''), callsign),
+			last_seen = $3,
+			last_lat = COALESCE($4, last_lat),
+			last_lon = COALESCE($5, last_lon),
+			max_alt_ft = GREATEST(COALESCE(max_alt_ft, 0), COALESCE($6, 0)),
+			total_dist_nm = $7,
+			completed = $8
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(query,
+		flight.ID, flight.Callsign, flight.LastSeen,
+		flight.LastLat, flight.LastLon,
+		flight.MaxAltFt, flight.TotalDistNM, flight.Completed,
+	)
+	return err
+}
+
+func (r *Repository) GetRecentFlights(limit int) ([]FlightRecord, error) {
+	query := `
+		SELECT id, icao, COALESCE(callsign, ''), COALESCE(registration, ''), COALESCE(aircraft_type, ''),
+		       first_seen, last_seen, first_lat, first_lon, last_lat, last_lon,
+		       max_alt_ft, total_dist_nm, completed
+		FROM flights
+		WHERE completed = true
+		ORDER BY last_seen DESC
+		LIMIT $1
+	`
+
+	rows, err := r.db.Query(query, limit)
+	if err != nil {
+		return []FlightRecord{}, err
+	}
+	defer rows.Close()
+
+	flights := []FlightRecord{}
+	for rows.Next() {
+		var f FlightRecord
+		var firstLat, firstLon, lastLat, lastLon sql.NullFloat64
+		var maxAlt sql.NullInt64
+
+		err := rows.Scan(&f.ID, &f.ICAO, &f.Callsign, &f.Registration, &f.AircraftType,
+			&f.FirstSeen, &f.LastSeen, &firstLat, &firstLon, &lastLat, &lastLon,
+			&maxAlt, &f.TotalDistNM, &f.Completed)
+		if err != nil {
+			return []FlightRecord{}, err
+		}
+
+		if firstLat.Valid {
+			f.FirstLat = &firstLat.Float64
+		}
+		if firstLon.Valid {
+			f.FirstLon = &firstLon.Float64
+		}
+		if lastLat.Valid {
+			f.LastLat = &lastLat.Float64
+		}
+		if lastLon.Valid {
+			f.LastLon = &lastLon.Float64
+		}
+		if maxAlt.Valid {
+			v := int(maxAlt.Int64)
+			f.MaxAltFt = &v
+		}
+
+		flights = append(flights, f)
+	}
+	return flights, rows.Err()
+}
+
+func (r *Repository) GetFlightByID(id int64) (*FlightRecord, error) {
+	query := `
+		SELECT id, icao, COALESCE(callsign, ''), COALESCE(registration, ''), COALESCE(aircraft_type, ''),
+		       first_seen, last_seen, first_lat, first_lon, last_lat, last_lon,
+		       max_alt_ft, total_dist_nm, completed
+		FROM flights
+		WHERE id = $1
+	`
+
+	var f FlightRecord
+	var firstLat, firstLon, lastLat, lastLon sql.NullFloat64
+	var maxAlt sql.NullInt64
+
+	err := r.db.QueryRow(query, id).Scan(&f.ID, &f.ICAO, &f.Callsign, &f.Registration, &f.AircraftType,
+		&f.FirstSeen, &f.LastSeen, &firstLat, &firstLon, &lastLat, &lastLon,
+		&maxAlt, &f.TotalDistNM, &f.Completed)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if firstLat.Valid {
+		f.FirstLat = &firstLat.Float64
+	}
+	if firstLon.Valid {
+		f.FirstLon = &firstLon.Float64
+	}
+	if lastLat.Valid {
+		f.LastLat = &lastLat.Float64
+	}
+	if lastLon.Valid {
+		f.LastLon = &lastLon.Float64
+	}
+	if maxAlt.Valid {
+		v := int(maxAlt.Int64)
+		f.MaxAltFt = &v
+	}
+
+	return &f, nil
+}
+
+type PeakStats struct {
+	BusiestHour        time.Time `json:"busiest_hour"`
+	BusiestHourCount   int       `json:"busiest_hour_count"`
+	BusiestDay         string    `json:"busiest_day"`
+	BusiestDayCount    int       `json:"busiest_day_count"`
+	AvgAircraftPerHour float64   `json:"avg_aircraft_per_hour"`
+	TotalHoursTracked  int       `json:"total_hours_tracked"`
+}
+
+func (r *Repository) GetPeakStats() (*PeakStats, error) {
+	stats := &PeakStats{}
+
+	hourQuery := `
+		SELECT date_trunc('hour', timestamp) as hour, COUNT(DISTINCT icao) as count
+		FROM position_history
+		WHERE timestamp > NOW() - INTERVAL '7 days'
+		GROUP BY hour
+		ORDER BY count DESC
+		LIMIT 1
+	`
+	var busiestHour sql.NullTime
+	var busiestHourCount sql.NullInt64
+	err := r.db.QueryRow(hourQuery).Scan(&busiestHour, &busiestHourCount)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if busiestHour.Valid {
+		stats.BusiestHour = busiestHour.Time
+		stats.BusiestHourCount = int(busiestHourCount.Int64)
+	}
+
+	dayQuery := `
+		SELECT date_trunc('day', timestamp)::date as day, COUNT(DISTINCT icao) as count
+		FROM position_history
+		WHERE timestamp > NOW() - INTERVAL '30 days'
+		GROUP BY day
+		ORDER BY count DESC
+		LIMIT 1
+	`
+	var busiestDay sql.NullTime
+	var busiestDayCount sql.NullInt64
+	err = r.db.QueryRow(dayQuery).Scan(&busiestDay, &busiestDayCount)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if busiestDay.Valid {
+		stats.BusiestDay = busiestDay.Time.Format("2006-01-02")
+		stats.BusiestDayCount = int(busiestDayCount.Int64)
+	}
+
+	avgQuery := `
+		SELECT 
+			COUNT(DISTINCT date_trunc('hour', timestamp)) as hours,
+			COUNT(DISTINCT icao) as total_aircraft
+		FROM position_history
+		WHERE timestamp > NOW() - INTERVAL '7 days'
+	`
+	var hours, totalAircraft sql.NullInt64
+	err = r.db.QueryRow(avgQuery).Scan(&hours, &totalAircraft)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if hours.Valid && hours.Int64 > 0 {
+		stats.TotalHoursTracked = int(hours.Int64)
+		stats.AvgAircraftPerHour = float64(totalAircraft.Int64) / float64(hours.Int64)
+	}
+
+	return stats, nil
+}
+

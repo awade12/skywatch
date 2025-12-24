@@ -9,7 +9,9 @@ import (
 
 	"adsb-tracker/internal/database"
 	"adsb-tracker/internal/feed"
+	"adsb-tracker/internal/flight"
 	"adsb-tracker/internal/health"
+	rangetracker "adsb-tracker/internal/range"
 	"adsb-tracker/internal/tracker"
 	"adsb-tracker/internal/webhook"
 )
@@ -23,6 +25,8 @@ type Server struct {
 	feedClient    *feed.Client
 	webhooks      *webhook.Dispatcher
 	nodeName      string
+	rangeTracker  *rangetracker.Tracker
+	flightTracker *flight.Tracker
 }
 
 func NewServer(t *tracker.Tracker, repo *database.Repository) *Server {
@@ -51,6 +55,14 @@ func (s *Server) SetNodeName(name string) {
 	s.nodeName = name
 }
 
+func (s *Server) SetRangeTracker(rt *rangetracker.Tracker) {
+	s.rangeTracker = rt
+}
+
+func (s *Server) SetFlightTracker(ft *flight.Tracker) {
+	s.flightTracker = ft
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -66,6 +78,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/stats/overall", s.handleStatsOverall)
 	mux.HandleFunc("/api/v1/stats/altitude", s.handleStatsAltitude)
 	mux.HandleFunc("/api/v1/stats/recent", s.handleStatsRecent)
+	mux.HandleFunc("/api/v1/stats/range", s.handleStatsRange)
+	mux.HandleFunc("/api/v1/stats/peak", s.handleStatsPeak)
+	mux.HandleFunc("/api/v1/flights", s.handleFlights)
+	mux.HandleFunc("/api/v1/flights/", s.handleFlightByID)
 	mux.HandleFunc("/api/v1/receiver", s.handleReceiver)
 	mux.HandleFunc("/api/v1/receiver/health", s.handleReceiverHealth)
 	mux.HandleFunc("/api/v1/receiver/feed", s.handleReceiverFeed)
@@ -533,4 +549,98 @@ func (s *Server) handleWebhookTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Test webhook sent"})
+}
+
+func (s *Server) handleStatsRange(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.rangeTracker == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"buckets": []interface{}{}, "all_time_max_nm": 0})
+		return
+	}
+
+	stats := s.rangeTracker.GetStats()
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleStatsPeak(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.repo == nil {
+		http.Error(w, "Database not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	stats, err := s.repo.GetPeakStats()
+	if err != nil {
+		http.Error(w, "Failed to get peak stats", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleFlights(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.flightTracker == nil {
+		writeJSON(w, http.StatusOK, []interface{}{})
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+
+	flights, err := s.flightTracker.GetRecentFlights(limit)
+	if err != nil {
+		http.Error(w, "Failed to get flights", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, flights)
+}
+
+func (s *Server) handleFlightByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.flightTracker == nil {
+		http.Error(w, "Flight tracking not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/flights/")
+	id, err := strconv.ParseInt(path, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid flight ID", http.StatusBadRequest)
+		return
+	}
+
+	flight, err := s.flightTracker.GetFlightByID(id)
+	if err != nil {
+		http.Error(w, "Failed to get flight", http.StatusInternalServerError)
+		return
+	}
+
+	if flight == nil {
+		http.Error(w, "Flight not found", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, flight)
 }

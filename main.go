@@ -16,8 +16,10 @@ import (
 	"adsb-tracker/internal/config"
 	"adsb-tracker/internal/database"
 	"adsb-tracker/internal/feed"
+	"adsb-tracker/internal/flight"
 	"adsb-tracker/internal/health"
 	"adsb-tracker/internal/lookup"
+	rangetracker "adsb-tracker/internal/range"
 	"adsb-tracker/internal/tracker"
 	"adsb-tracker/internal/webhook"
 )
@@ -128,14 +130,24 @@ func main() {
 	healthMonitor := health.NewMonitor(cfg.Webhooks.HealthThresholds, webhookDispatcher)
 	go healthMonitor.Run(ctx)
 
+	var rangeRepo rangetracker.Repository
+	if repo != nil {
+		rangeRepo = &rangeRepoAdapter{repo: repo}
+	}
+	rangeTrk := rangetracker.New(rangeRepo)
+
+	flightTrk := flight.New(repo, cfg.StaleTimeout)
+
 	trk := tracker.New(tracker.Options{
-		StaleAfter:  cfg.StaleTimeout,
-		RxLat:       cfg.RxLat,
-		RxLon:       cfg.RxLon,
-		TrailLength: cfg.TrailLength,
-		Repo:        repo,
-		FAALookup:   faaLookup,
-		Webhooks:    webhookDispatcher,
+		StaleAfter:    cfg.StaleTimeout,
+		RxLat:         cfg.RxLat,
+		RxLon:         cfg.RxLon,
+		TrailLength:   cfg.TrailLength,
+		Repo:          repo,
+		FAALookup:     faaLookup,
+		Webhooks:      webhookDispatcher,
+		RangeTracker:  rangeTrk,
+		FlightTracker: flightTrk,
 	})
 	go trk.StartCleanup(ctx)
 
@@ -147,6 +159,8 @@ func main() {
 	server.SetFeedClient(feedClient)
 	server.SetWebhooks(webhookDispatcher)
 	server.SetNodeName(cfg.NodeName)
+	server.SetRangeTracker(rangeTrk)
+	server.SetFlightTracker(flightTrk)
 	server.StartHub()
 
 	httpServer := &http.Server{
@@ -214,4 +228,30 @@ func startDump1090Process(deviceIndex, port int, feedFormat string) *exec.Cmd {
 
 	log.Printf("[MAIN] Started dump1090 (PID %d) with --net on port %d (%s)", cmd.Process.Pid, port, feedFormat)
 	return cmd
+}
+
+type rangeRepoAdapter struct {
+	repo *database.Repository
+}
+
+func (a *rangeRepoAdapter) SaveRangeStats(bucket int, maxNM float64, icao string, count int64) error {
+	return a.repo.SaveRangeStats(bucket, maxNM, icao, count)
+}
+
+func (a *rangeRepoAdapter) LoadRangeStats() ([]rangetracker.BucketStats, error) {
+	dbStats, err := a.repo.LoadRangeStats()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make([]rangetracker.BucketStats, len(dbStats))
+	for i, s := range dbStats {
+		stats[i] = rangetracker.BucketStats{
+			Bearing:      s.Bearing,
+			MaxRangeNM:   s.MaxRangeNM,
+			MaxRangeICAO: s.MaxRangeICAO,
+			ContactCount: s.ContactCount,
+		}
+	}
+	return stats, nil
 }

@@ -43,9 +43,11 @@ type Tracker struct {
 	totalSeen    int
 	trailLength  int
 
-	repo      Repository
-	faaLookup FAALookup
-	webhooks  WebhookDispatcher
+	repo          Repository
+	faaLookup     FAALookup
+	webhooks      WebhookDispatcher
+	rangeTracker  RangeTracker
+	flightTracker FlightTracker
 
 	eventsMu    sync.RWMutex
 	subscribers []chan AircraftEvent
@@ -77,24 +79,37 @@ type WebhookDispatcher interface {
 	IsEmergencySquawk(squawk string) bool
 }
 
+type RangeTracker interface {
+	Record(bearing, distanceNM float64, icao string)
+}
+
+type FlightTracker interface {
+	Update(ac *models.Aircraft)
+	CompleteStaleFlight(icao string)
+}
+
 type Options struct {
-	StaleAfter  time.Duration
-	RxLat       float64
-	RxLon       float64
-	TrailLength int
-	Repo        Repository
-	FAALookup   FAALookup
-	Webhooks    WebhookDispatcher
+	StaleAfter    time.Duration
+	RxLat         float64
+	RxLon         float64
+	TrailLength   int
+	Repo          Repository
+	FAALookup     FAALookup
+	Webhooks      WebhookDispatcher
+	RangeTracker  RangeTracker
+	FlightTracker FlightTracker
 }
 
 func New(opts Options) *Tracker {
 	t := &Tracker{
-		aircraft:    make(map[string]*models.Aircraft),
-		staleAfter:  opts.StaleAfter,
-		trailLength: opts.TrailLength,
-		repo:        opts.Repo,
-		faaLookup:   opts.FAALookup,
-		webhooks:    opts.Webhooks,
+		aircraft:      make(map[string]*models.Aircraft),
+		staleAfter:    opts.StaleAfter,
+		trailLength:   opts.TrailLength,
+		repo:          opts.Repo,
+		faaLookup:     opts.FAALookup,
+		webhooks:      opts.Webhooks,
+		rangeTracker:  opts.RangeTracker,
+		flightTracker: opts.FlightTracker,
 	}
 	if t.trailLength == 0 {
 		t.trailLength = 50
@@ -153,6 +168,8 @@ func (t *Tracker) Update(update *models.Aircraft) {
 		t.aircraft[update.ICAO] = &ac
 		t.totalSeen++
 		t.updateMaxRange(&ac)
+		t.recordRange(&ac)
+		t.updateFlightTracker(&ac)
 		t.saveToRepo(&ac)
 		log.Printf("[TRACKER] Aircraft added: %s", update.ICAO)
 		t.broadcast(AircraftEvent{Type: EventAdd, Aircraft: ac})
@@ -176,6 +193,8 @@ func (t *Tracker) Update(update *models.Aircraft) {
 	existing.Merge(update)
 	existing.CalculateDistance(t.rxLocation)
 	t.updateMaxRange(existing)
+	t.recordRange(existing)
+	t.updateFlightTracker(existing)
 
 	if existing.Registration == "" {
 		t.enrichWithFAA(existing)
@@ -366,6 +385,22 @@ func (t *Tracker) updateMaxRange(ac *models.Aircraft) {
 	}
 }
 
+func (t *Tracker) recordRange(ac *models.Aircraft) {
+	if t.rangeTracker == nil {
+		return
+	}
+	if ac.Bearing != nil && ac.DistanceNM != nil {
+		t.rangeTracker.Record(*ac.Bearing, *ac.DistanceNM, ac.ICAO)
+	}
+}
+
+func (t *Tracker) updateFlightTracker(ac *models.Aircraft) {
+	if t.flightTracker == nil {
+		return
+	}
+	t.flightTracker.Update(ac)
+}
+
 func (t *Tracker) GetStats() Stats {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -548,6 +583,10 @@ func (t *Tracker) cleanupStale() {
 				acCopy := ac.Copy()
 				delete(t.aircraft, icao)
 				t.broadcast(AircraftEvent{Type: EventRemove, Aircraft: acCopy})
+
+				if t.flightTracker != nil {
+					go t.flightTracker.CompleteStaleFlight(icao)
+				}
 			}
 		}
 	}

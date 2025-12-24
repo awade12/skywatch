@@ -99,6 +99,45 @@ func (db *DB) Migrate() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_faa_registry_registration ON faa_registry(registration);
+
+	CREATE TABLE IF NOT EXISTS session_stats (
+		id INTEGER PRIMARY KEY DEFAULT 1,
+		total_seen INTEGER DEFAULT 0,
+		max_range_nm DOUBLE PRECISION DEFAULT 0,
+		max_range_icao VARCHAR(6),
+		session_start TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		last_save TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		CONSTRAINT single_row CHECK (id = 1)
+	);
+
+	CREATE TABLE IF NOT EXISTS range_stats (
+		bearing_bucket INTEGER PRIMARY KEY,
+		max_range_nm DOUBLE PRECISION DEFAULT 0,
+		max_range_icao VARCHAR(6),
+		contact_count BIGINT DEFAULT 0,
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	);
+
+	CREATE TABLE IF NOT EXISTS flights (
+		id SERIAL PRIMARY KEY,
+		icao VARCHAR(6) NOT NULL,
+		callsign VARCHAR(10),
+		registration VARCHAR(10),
+		aircraft_type VARCHAR(10),
+		first_seen TIMESTAMP WITH TIME ZONE NOT NULL,
+		last_seen TIMESTAMP WITH TIME ZONE NOT NULL,
+		first_lat DOUBLE PRECISION,
+		first_lon DOUBLE PRECISION,
+		last_lat DOUBLE PRECISION,
+		last_lon DOUBLE PRECISION,
+		max_alt_ft INTEGER,
+		total_dist_nm DOUBLE PRECISION DEFAULT 0,
+		completed BOOLEAN DEFAULT FALSE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_flights_icao ON flights(icao);
+	CREATE INDEX IF NOT EXISTS idx_flights_last_seen ON flights(last_seen DESC);
+	CREATE INDEX IF NOT EXISTS idx_flights_completed ON flights(completed);
 	`
 
 	_, err := db.conn.Exec(schema)
