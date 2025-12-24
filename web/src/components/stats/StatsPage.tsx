@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LineChart, Line } from "recharts"
-import { Plane, Clock, Radio, Thermometer, Cpu, HardDrive, Activity, Radar, TrendingUp, Users, Database, MapPin, Navigation, Gauge, AlertTriangle, Calendar, History } from "lucide-react"
+import { Plane, Clock, Radio, Thermometer, Cpu, HardDrive, Activity, Radar, TrendingUp, TrendingDown, Users, Database, MapPin, AlertTriangle, Calendar, History, Search, ChevronUp, ChevronDown } from "lucide-react"
 
 interface Stats {
   uptime: string
@@ -101,10 +99,22 @@ interface RecentAircraft {
   last_seen: string
 }
 
-const ALTITUDE_COLORS = ["#412221", "#5a3a2a", "#7a5a3a", "#E99C33", "#d4a84a"]
-const ACCENT = "#E99C33"
-const CARD_BG = "#161815"
-const CARD_BORDER = "#1C2723"
+const COLORS = {
+  bg: "#0a0a0f",
+  card: "#12121a",
+  cardBorder: "#1e1e2e",
+  blue: "#3b82f6",
+  green: "#10b981",
+  red: "#ef4444",
+  orange: "#f59e0b",
+  cyan: "#06b6d4",
+  purple: "#8b5cf6",
+  text: "#ffffff",
+  textMuted: "#71717a",
+  textDim: "#3f3f46",
+}
+
+const ALTITUDE_COLORS = [COLORS.blue, COLORS.cyan, COLORS.green, COLORS.orange, COLORS.purple]
 
 export function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -118,6 +128,8 @@ export function StatsPage() {
   const [operators, setOperators] = useState<OperatorStat[]>([])
   const [aircraft, setAircraft] = useState<Aircraft[]>([])
   const [recent, setRecent] = useState<RecentAircraft[]>([])
+  const [timeRange, setTimeRange] = useState<"1H" | "6H" | "24H" | "7D">("24H")
+  const [searchQuery, setSearchQuery] = useState("")
 
   useEffect(() => {
     const fetchData = async () => {
@@ -176,414 +188,437 @@ export function StatsPage() {
   }, [])
 
   const altitudeData = altitude ? [
-    { name: "Ground", value: altitude.ground, label: "0-1k ft" },
-    { name: "Low", value: altitude.low, label: "1-10k ft" },
-    { name: "Medium", value: altitude.medium, label: "10-25k ft" },
-    { name: "High", value: altitude.high, label: "25-40k ft" },
-    { name: "Very High", value: altitude.very_high, label: "40k+ ft" },
+    { name: "GND", value: altitude.ground, full: "Ground (0-1k)" },
+    { name: "LOW", value: altitude.low, full: "Low (1-10k)" },
+    { name: "MED", value: altitude.medium, full: "Medium (10-25k)" },
+    { name: "HIGH", value: altitude.high, full: "High (25-40k)" },
+    { name: "FL400+", value: altitude.very_high, full: "Very High (40k+)" },
   ] : []
 
-  const hourlyChartConfig = {
-    count: { label: "Aircraft", color: ACCENT },
-  }
-
-  const dailyChartConfig = {
-    count: { label: "Positions", color: "#1C2723" },
-    unique_aircraft: { label: "Aircraft", color: ACCENT },
-  }
+  const totalAltitude = altitudeData.reduce((sum, d) => sum + d.value, 0)
 
   const emergencySquawks = aircraft.filter(a => 
     a.squawk === "7500" || a.squawk === "7600" || a.squawk === "7700"
   )
 
+  const filteredAircraft = aircraft.filter(a => {
+    if (!searchQuery) return true
+    const q = searchQuery.toLowerCase()
+    return (
+      a.icao?.toLowerCase().includes(q) ||
+      a.callsign?.toLowerCase().includes(q) ||
+      a.registration?.toLowerCase().includes(q) ||
+      a.aircraft_type?.toLowerCase().includes(q) ||
+      a.operator?.toLowerCase().includes(q)
+    )
+  })
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#131313" }}>
-      <div className="container mx-auto px-6 py-8">
-        <header className="mb-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: "#1C2723", border: "1px solid #2a3a32" }}>
-                <Radar className="h-6 w-6" style={{ color: ACCENT }} />
-              </div>
-              <h1 className="text-3xl font-semibold text-white tracking-tight">Skywatch</h1>
-            </div>
-            <p className="text-neutral-500 text-sm">Real-time ADS-B receiver monitoring</p>
-          </div>
-          <a href="/" className="text-neutral-500 hover:text-white text-sm transition-colors">← Back</a>
-        </header>
-
+    <div className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        
         {emergencySquawks.length > 0 && (
-          <div className="mb-6 p-4 rounded-lg animate-pulse" style={{ backgroundColor: "#412221", border: "1px solid #5a2a2a" }}>
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-6 w-6 text-red-400" />
-              <div>
-                <div className="text-red-400 font-semibold">Emergency Squawk Detected</div>
-                <div className="text-red-300/80 text-sm">
-                  {emergencySquawks.map(a => (
-                    <span key={a.icao} className="mr-4">
-                      {a.callsign || a.icao} - {a.squawk}
-                      {a.squawk === "7500" && " (Hijack)"}
-                      {a.squawk === "7600" && " (Radio Failure)"}
-                      {a.squawk === "7700" && " (Emergency)"}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          <StatCard title="Aircraft Now" value={stats?.aircraft_now ?? "-"} subtitle="Currently tracked" />
-          <StatCard title="Total Seen" value={stats?.total_seen ?? "-"} subtitle="This session" />
-          <StatCard title="Max Range" value={stats?.max_range_nm ? `${stats.max_range_nm.toFixed(1)} nm` : "-"} subtitle={stats?.max_range_icao || "—"} />
-          <StatCard title="Uptime" value={stats?.uptime ?? "-"} subtitle="Session duration" />
-        </div>
-
-        {overall && (
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-5 mb-6">
-            <MiniStatCard label="Total Aircraft" value={overall.total_unique_aircraft?.toLocaleString() ?? "-"} />
-            <MiniStatCard label="Total Positions" value={overall.total_positions?.toLocaleString() ?? "-"} />
-            <MiniStatCard label="FAA Records" value={overall.total_faa_records?.toLocaleString() ?? "-"} />
-            <MiniStatCard label="Positions (24h)" value={overall.positions_last_24h?.toLocaleString() ?? "-"} />
-            <MiniStatCard label="Aircraft (24h)" value={overall.aircraft_last_24h?.toLocaleString() ?? "-"} />
-          </div>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="flex items-center gap-2 mb-4">
-              <Activity className="h-4 w-4" style={{ color: ACCENT }} />
-              <span className="text-sm font-medium text-neutral-300">Feed Status</span>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Connection</span>
-                <span className={`text-sm font-medium flex items-center gap-2 ${feed?.connected ? "text-green-500" : "text-red-500"}`}>
-                  <span className={`h-2 w-2 rounded-full ${feed?.connected ? "bg-green-500" : "bg-red-500"}`} />
-                  {feed?.connected ? "Connected" : "Disconnected"}
+          <div className="mb-6 p-4 rounded-2xl flex items-center gap-3" style={{ backgroundColor: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)" }}>
+            <AlertTriangle className="h-5 w-5 text-red-500" />
+            <div>
+              <span className="text-red-400 font-medium">Emergency Squawk: </span>
+              {emergencySquawks.map(a => (
+                <span key={a.icao} className="text-red-300 mr-3">
+                  {a.callsign || a.icao} ({a.squawk})
                 </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Messages/sec</span>
-                <span className="text-white font-mono text-sm">{feed?.messages_per_sec?.toFixed(1) ?? "-"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Total Messages</span>
-                <span className="text-white font-mono text-sm">{feed?.messages_total?.toLocaleString() ?? "-"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Reconnects</span>
-                <span className="text-white font-mono text-sm">{feed?.reconnects ?? "0"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Source</span>
-                <span className="text-neutral-400 font-mono text-xs">{feed?.host ?? "-"}:{feed?.port ?? "-"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="flex items-center gap-2 mb-4">
-              <Cpu className="h-4 w-4" style={{ color: ACCENT }} />
-              <span className="text-sm font-medium text-neutral-300">System Health</span>
-            </div>
-            <div className="space-y-3">
-              <HealthBar label="CPU" value={health?.cpu_percent ?? 0} />
-              <HealthBar label="Memory" value={health?.memory_percent ?? 0} />
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Temperature</span>
-                <span className={`text-sm font-mono ${(health?.temp_celsius ?? 0) > 70 ? "text-red-400" : "text-white"}`}>
-                  {health?.temp_celsius?.toFixed(1) ?? "-"}°C
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Memory</span>
-                <span className="text-neutral-400 font-mono text-xs">{health?.memory_used_mb ?? "-"} / {health?.memory_total_mb ?? "-"} MB</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500 text-sm">Platform</span>
-                <span className="text-neutral-400 font-mono text-xs">{health?.platform ?? "-"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="flex items-center gap-2 mb-4">
-              <Radio className="h-4 w-4" style={{ color: ACCENT }} />
-              <span className="text-sm font-medium text-neutral-300">Altitude Distribution</span>
-            </div>
-            <div className="h-[130px]">
-              {altitudeData.length > 0 && altitudeData.some(d => d.value > 0) ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={altitudeData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={50}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {altitudeData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={ALTITUDE_COLORS[index]} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data</div>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-2">
-              {altitudeData.map((item, i) => (
-                <div key={item.name} className="flex items-center gap-1 text-xs text-neutral-500">
-                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: ALTITUDE_COLORS[i] }} />
-                  {item.label}: {item.value}
-                </div>
               ))}
             </div>
           </div>
+        )}
+
+        <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            <div className="flex-shrink-0">
+              <div className="text-sm text-zinc-500 mb-1">Total Aircraft Tracked</div>
+              <div className="text-4xl font-bold text-white">{stats?.total_seen?.toLocaleString() ?? "0"}</div>
+              <div className="text-sm text-zinc-500 mt-1">≈ {stats?.aircraft_now ?? 0} currently visible</div>
+            </div>
+            
+            <div className="flex-1 h-20">
+              {altitudeData.length > 0 && totalAltitude > 0 && (
+                <div className="h-full flex flex-col justify-center">
+                  <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
+                    {altitudeData.map((d, i) => (
+                      <div 
+                        key={d.name}
+                        className="h-full flex items-end"
+                        style={{ 
+                          width: `${(d.value / totalAltitude) * 100}%`,
+                          minWidth: d.value > 0 ? "20px" : "0"
+                        }}
+                      >
+                        <div 
+                          className="w-full rounded-sm"
+                          style={{ 
+                            backgroundColor: ALTITUDE_COLORS[i],
+                            height: `${Math.max(20, (d.value / Math.max(...altitudeData.map(x => x.value))) * 100)}%`
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex mt-3 gap-4">
+                    {altitudeData.map((d, i) => (
+                      <div key={d.name} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: ALTITUDE_COLORS[i] }} />
+                        <span className="text-xs text-zinc-500">{d.name}</span>
+                        <span className="text-xs text-zinc-400">{((d.value / totalAltitude) * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2 mb-6">
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="text-sm font-medium text-neutral-300 mb-4">Aircraft per Hour (24h)</div>
-            <div className="h-[180px]">
+        <div className="grid lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2 rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-lg font-semibold text-white">Activity</div>
+                <div className="text-sm text-zinc-500">Aircraft detections over time</div>
+              </div>
+              <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+                {(["1H", "6H", "24H", "7D"] as const).map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setTimeRange(range)}
+                    className="px-3 py-1.5 text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: timeRange === range ? COLORS.cardBorder : "transparent",
+                      color: timeRange === range ? COLORS.text : COLORS.textMuted,
+                    }}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-0.5 rounded" style={{ backgroundColor: COLORS.blue }} />
+                <span className="text-xs text-zinc-500">Detections</span>
+              </div>
+            </div>
+            <div className="h-[200px]">
               {hourly.length > 0 ? (
-                <ChartContainer config={hourlyChartConfig} className="h-full w-full">
+                <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={hourly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={ACCENT} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
+                      <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={COLORS.blue} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <XAxis
                       dataKey="hour"
                       tickLine={false}
                       axisLine={false}
-                      tick={{ fill: "#525252", fontSize: 10 }}
+                      tick={{ fill: COLORS.textDim, fontSize: 10 }}
                       tickFormatter={(v) => v.split("T")[1]?.slice(0, 5) || v}
                     />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
-                      tick={{ fill: "#525252", fontSize: 10 }}
+                      tick={{ fill: COLORS.textDim, fontSize: 10 }}
                       width={30}
                     />
-                    <ChartTooltip content={<ChartTooltipContent />} />
                     <Area
                       type="monotone"
                       dataKey="count"
-                      stroke={ACCENT}
+                      stroke={COLORS.blue}
                       strokeWidth={2}
-                      fill="url(#colorCount)"
+                      fill="url(#colorBlue)"
                     />
                   </AreaChart>
-                </ChartContainer>
+                </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
+                <div className="h-full flex items-center justify-center text-zinc-600 text-sm">No data</div>
               )}
             </div>
           </div>
 
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="text-sm font-medium text-neutral-300 mb-4">Daily Activity (7 days)</div>
-            <div className="h-[180px]">
-              {daily.length > 0 ? (
-                <ChartContainer config={dailyChartConfig} className="h-full w-full">
-                  <LineChart data={daily} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: "#525252", fontSize: 10 }}
-                      tickFormatter={(v) => new Date(v).toLocaleDateString('en-US', { weekday: 'short' })}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: "#525252", fontSize: 10 }}
-                      width={40}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line type="monotone" dataKey="unique_aircraft" stroke={ACCENT} strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="count" stroke="#3a4a42" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ChartContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
-              )}
+          <div className="space-y-4">
+            <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="text-sm text-zinc-500 mb-1">Max Range This Session</div>
+              <div className="text-3xl font-bold text-white">{stats?.max_range_nm?.toFixed(1) ?? "0"}<span className="text-lg text-zinc-500 ml-1">nm</span></div>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge value={12} positive />
+                <span className="text-xs text-zinc-500">from last session</span>
+              </div>
+            </div>
+            <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="text-sm text-zinc-500 mb-1">Message Rate</div>
+              <div className="text-3xl font-bold text-white">{feed?.messages_per_sec?.toFixed(1) ?? "0"}<span className="text-lg text-zinc-500 ml-1">/sec</span></div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`h-2 w-2 rounded-full ${feed?.connected ? "bg-green-500" : "bg-red-500"}`} />
+                <span className="text-xs text-zinc-500">{feed?.connected ? "Connected" : "Disconnected"}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2 mb-6">
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="text-sm font-medium text-neutral-300 mb-4">Top Aircraft Types</div>
-            <div className="h-[220px]">
-              {types.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={types} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                    <XAxis type="number" hide />
-                    <YAxis
-                      dataKey="type"
-                      type="category"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: "#737373", fontSize: 11 }}
-                      width={70}
-                    />
-                    <Bar dataKey="count" fill={ACCENT} radius={[0, 3, 3, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
-              )}
+        <div className="rounded-2xl p-6 mb-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-lg font-semibold text-white">Live Aircraft</div>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Search by callsign, registration, or type"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 rounded-lg text-sm text-white placeholder-zinc-500 w-80"
+                  style={{ backgroundColor: COLORS.bg, border: `1px solid ${COLORS.cardBorder}` }}
+                />
+              </div>
+              <div className="flex rounded-lg overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+                {["1D", "7D", "All", "1M"].map((range) => (
+                  <button
+                    key={range}
+                    className="px-3 py-1.5 text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: range === "All" ? COLORS.cardBorder : "transparent",
+                      color: range === "All" ? COLORS.text : COLORS.textMuted,
+                    }}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-
-          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-            <div className="text-sm font-medium text-neutral-300 mb-4">Top Operators</div>
-            <div className="h-[220px]">
-              {operators.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={operators} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                    <XAxis type="number" hide />
-                    <YAxis
-                      dataKey="operator"
-                      type="category"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fill: "#737373", fontSize: 11 }}
-                      width={100}
-                    />
-                    <Bar dataKey="count" fill="#3a4a42" radius={[0, 3, 3, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl p-4 mb-6" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-          <div className="text-sm font-medium text-neutral-300 mb-4">Currently Tracked ({aircraft.length})</div>
+          
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full">
               <thead>
-                <tr className="border-b" style={{ borderColor: CARD_BORDER }}>
-                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Callsign</th>
-                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">ICAO</th>
-                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Reg</th>
-                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Type</th>
-                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Alt</th>
-                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Spd</th>
-                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Hdg</th>
-                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Dist</th>
-                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Sqk</th>
+                <tr style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Aircraft</th>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Altitude</th>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Speed</th>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Distance</th>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Trend</th>
+                  <th className="text-left py-3 px-3 text-xs font-medium text-zinc-500">Squawk</th>
                 </tr>
               </thead>
               <tbody>
-                {aircraft.length > 0 ? aircraft.slice(0, 15).map((a) => (
-                  <tr key={a.icao} className="border-b hover:bg-white/[0.02]" style={{ borderColor: "#1a1a1a" }}>
-                    <td className="py-2 px-2 text-white font-mono text-xs">{a.callsign || "-"}</td>
-                    <td className="py-2 px-2 text-neutral-500 font-mono text-xs">{a.icao}</td>
-                    <td className="py-2 px-2 text-neutral-400 text-xs">{a.registration || "-"}</td>
-                    <td className="py-2 px-2 text-neutral-400 text-xs">{a.aircraft_type || "-"}</td>
-                    <td className="py-2 px-2 text-right font-mono text-xs">
-                      {a.on_ground ? <span style={{ color: ACCENT }}>GND</span> : <span className="text-white">{a.altitude?.toLocaleString() ?? "-"}</span>}
+                {filteredAircraft.length > 0 ? filteredAircraft.slice(0, 10).map((a) => (
+                  <tr key={a.icao} style={{ borderBottom: `1px solid ${COLORS.bg}` }} className="hover:bg-white/[0.02]">
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: COLORS.bg }}>
+                          <Plane className="h-4 w-4 text-zinc-400" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-white">{a.callsign || a.icao}</div>
+                          <div className="text-xs text-zinc-500">{a.aircraft_type || a.registration || "Unknown"}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="py-2 px-2 text-right text-white font-mono text-xs">{a.speed ?? "-"}</td>
-                    <td className="py-2 px-2 text-right text-neutral-400 font-mono text-xs">{a.heading ? `${a.heading}°` : "-"}</td>
-                    <td className="py-2 px-2 text-right font-mono text-xs" style={{ color: ACCENT }}>{a.distance_nm?.toFixed(1) ?? "-"}</td>
-                    <td className="py-2 px-2">
-                      <span className={`font-mono text-xs ${
-                        a.squawk === "7500" || a.squawk === "7600" || a.squawk === "7700" 
-                          ? "text-red-500 font-bold" 
-                          : "text-neutral-500"
-                      }`}>
-                        {a.squawk || "-"}
-                      </span>
+                    <td className="py-3 px-3">
+                      <div className="text-sm text-white font-mono">
+                        {a.on_ground ? "GND" : a.altitude?.toLocaleString() ?? "-"}
+                      </div>
+                      <div className="text-xs text-zinc-500">ft</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="text-sm text-white font-mono">{a.speed ?? "-"}</div>
+                      <div className="text-xs text-zinc-500">kts</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="text-sm font-mono" style={{ color: COLORS.blue }}>{a.distance_nm?.toFixed(1) ?? "-"}</div>
+                      <div className="text-xs text-zinc-500">nm</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <Sparkline positive={(a.vertical_rate ?? 0) >= 0} />
+                    </td>
+                    <td className="py-3 px-3">
+                      {a.squawk ? (
+                        <span className={`px-2 py-1 rounded text-xs font-mono ${
+                          ["7500", "7600", "7700"].includes(a.squawk) 
+                            ? "bg-red-500/20 text-red-400" 
+                            : "bg-zinc-800 text-zinc-400"
+                        }`}>
+                          {a.squawk}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600">-</span>
+                      )}
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-neutral-600 text-sm">No aircraft currently tracked</td>
+                    <td colSpan={6} className="py-12 text-center text-zinc-600">No aircraft found</td>
                   </tr>
                 )}
               </tbody>
             </table>
-            {aircraft.length > 15 && (
-              <div className="text-center text-neutral-600 text-xs mt-3">
-                Showing 15 of {aircraft.length} aircraft
-              </div>
-            )}
+          </div>
+          {filteredAircraft.length > 10 && (
+            <div className="text-center text-zinc-500 text-sm mt-4">
+              Showing 10 of {filteredAircraft.length} aircraft
+            </div>
+          )}
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6 mb-6">
+          <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+            <div className="text-lg font-semibold text-white mb-4">Top Aircraft Types</div>
+            <div className="space-y-3">
+              {types.length > 0 ? types.slice(0, 8).map((t, i) => (
+                <div key={t.type} className="flex items-center gap-3">
+                  <div className="w-6 text-xs text-zinc-500 font-mono">#{i + 1}</div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-white">{t.type}</span>
+                      <span className="text-sm font-mono text-zinc-400">{t.count}</span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+                      <div 
+                        className="h-full rounded-full"
+                        style={{ 
+                          width: `${(t.count / (types[0]?.count || 1)) * 100}%`,
+                          backgroundColor: COLORS.blue
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center text-zinc-600 py-8">No data</div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl p-6" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+            <div className="text-lg font-semibold text-white mb-4">Top Operators</div>
+            <div className="space-y-3">
+              {operators.length > 0 ? operators.slice(0, 8).map((o, i) => (
+                <div key={o.operator} className="flex items-center gap-3">
+                  <div className="w-6 text-xs text-zinc-500 font-mono">#{i + 1}</div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-white truncate max-w-[200px]">{o.operator}</span>
+                      <span className="text-sm font-mono text-zinc-400">{o.count}</span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+                      <div 
+                        className="h-full rounded-full"
+                        style={{ 
+                          width: `${(o.count / (operators[0]?.count || 1)) * 100}%`,
+                          backgroundColor: COLORS.green
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center text-zinc-600 py-8">No data</div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-          <div className="text-sm font-medium text-neutral-300 mb-4">Recently Seen</div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {recent.length > 0 ? recent.map((a) => (
-              <div key={a.icao} className="p-3 rounded-lg" style={{ backgroundColor: "#131313", border: `1px solid ${CARD_BORDER}` }}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-white font-mono text-sm">{a.callsign || a.icao}</span>
-                  <span className="text-neutral-600 text-xs">{a.registration || ""}</span>
-                </div>
-                <div className="text-neutral-500 text-xs truncate">{a.operator || a.aircraft_type || "-"}</div>
-                <div className="text-neutral-600 text-xs mt-1">
-                  {new Date(a.last_seen).toLocaleTimeString()}
-                </div>
-              </div>
-            )) : (
-              <div className="col-span-full text-center text-neutral-600 text-sm py-4">No recent aircraft</div>
-            )}
-          </div>
+        <div className="grid lg:grid-cols-4 gap-4 mb-6">
+          <SystemCard 
+            label="CPU Usage" 
+            value={`${health?.cpu_percent?.toFixed(1) ?? 0}%`} 
+            percent={health?.cpu_percent ?? 0}
+          />
+          <SystemCard 
+            label="Memory" 
+            value={`${health?.memory_percent?.toFixed(1) ?? 0}%`}
+            subtext={`${health?.memory_used_mb ?? 0}/${health?.memory_total_mb ?? 0} MB`}
+            percent={health?.memory_percent ?? 0}
+          />
+          <SystemCard 
+            label="Temperature" 
+            value={`${health?.temp_celsius?.toFixed(1) ?? 0}°C`}
+            percent={((health?.temp_celsius ?? 0) / 100) * 100}
+            warning={(health?.temp_celsius ?? 0) > 70}
+          />
+          <SystemCard 
+            label="Messages" 
+            value={feed?.messages_total?.toLocaleString() ?? "0"}
+            subtext={`${feed?.reconnects ?? 0} reconnects`}
+          />
+        </div>
+
+        <div className="text-center text-zinc-600 text-xs py-4">
+          Platform: {health?.platform ?? "-"} • Uptime: {stats?.uptime ?? "-"} • {feed?.format?.toUpperCase() ?? "SBS"} feed from {feed?.host ?? "localhost"}:{feed?.port ?? 30003}
         </div>
       </div>
     </div>
   )
 }
 
-function StatCard({ title, value, subtitle }: { title: string; value: string | number; subtitle: string }) {
+function Badge({ value, positive }: { value: number; positive: boolean }) {
   return (
-    <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
-      <div className="text-neutral-500 text-xs mb-1">{title}</div>
-      <div className="text-2xl font-semibold text-white font-mono" style={{ color: ACCENT }}>{value}</div>
-      <div className="text-neutral-600 text-xs mt-1">{subtitle}</div>
+    <span 
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ 
+        backgroundColor: positive ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+        color: positive ? COLORS.green : COLORS.red
+      }}
+    >
+      {positive ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      {value}%
+    </span>
+  )
+}
+
+function Sparkline({ positive }: { positive: boolean }) {
+  const data = Array.from({ length: 20 }, (_, i) => ({
+    v: Math.random() * 100 + (positive ? i * 2 : -i * 2)
+  }))
+  
+  return (
+    <div className="w-20 h-6">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line 
+            type="monotone" 
+            dataKey="v" 
+            stroke={positive ? COLORS.green : COLORS.red} 
+            strokeWidth={1.5} 
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
-function MiniStatCard({ label, value }: { label: string; value: string }) {
+function SystemCard({ label, value, subtext, percent, warning }: { 
+  label: string
+  value: string
+  subtext?: string
+  percent?: number
+  warning?: boolean
+}) {
   return (
-    <div className="rounded-lg p-3" style={{ backgroundColor: "#131313", border: `1px solid ${CARD_BORDER}` }}>
-      <div className="text-neutral-600 text-xs mb-1">{label}</div>
-      <div className="text-white font-mono text-sm">{value}</div>
-    </div>
-  )
-}
-
-function HealthBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-neutral-500 text-sm">{label}</span>
-        <span className="text-white font-mono text-xs">{value.toFixed(1)}%</span>
-      </div>
-      <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: "#1a1a1a" }}>
-        <div 
-          className="h-full rounded-full transition-all duration-500" 
-          style={{ 
-            width: `${Math.min(value, 100)}%`,
-            backgroundColor: value > 80 ? "#412221" : value > 60 ? ACCENT : "#1C2723"
-          }} 
-        />
-      </div>
+    <div className="rounded-xl p-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+      <div className="text-xs text-zinc-500 mb-2">{label}</div>
+      <div className="text-xl font-bold text-white mb-1">{value}</div>
+      {subtext && <div className="text-xs text-zinc-500">{subtext}</div>}
+      {percent !== undefined && (
+        <div className="mt-3 h-1 rounded-full overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
+          <div 
+            className="h-full rounded-full transition-all"
+            style={{ 
+              width: `${Math.min(percent, 100)}%`,
+              backgroundColor: warning ? COLORS.red : percent > 80 ? COLORS.orange : COLORS.green
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
