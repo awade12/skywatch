@@ -355,12 +355,12 @@ func (r *Repository) GetTopAircraftTypes(limit int) ([]AircraftTypeStats, error)
 
 func (r *Repository) GetTopOperators(limit int) ([]OperatorStats, error) {
 	query := `
-		SELECT f.operator, COUNT(DISTINCT p.icao) as count
+		SELECT f.owner, COUNT(DISTINCT p.icao) as count
 		FROM position_history p
 		JOIN faa_registry f ON p.icao = f.icao
-		WHERE f.operator IS NOT NULL AND f.operator != ''
+		WHERE f.owner IS NOT NULL AND f.owner != ''
 		AND p.timestamp > NOW() - INTERVAL '24 hours'
-		GROUP BY f.operator
+		GROUP BY f.owner
 		ORDER BY count DESC
 		LIMIT $1
 	`
