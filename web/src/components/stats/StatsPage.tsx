@@ -54,15 +54,15 @@ interface DailyStat {
 }
 
 interface AltitudeDistribution {
-  ground: number
-  low: number
-  medium: number
-  high: number
-  very_high: number
+  ground?: number
+  low?: number
+  medium?: number
+  high?: number
+  very_high?: number
 }
 
 interface TypeStat {
-  type: string
+  aircraft_type: string
   count: number
 }
 
@@ -97,6 +97,13 @@ interface RecentAircraft {
   registration?: string
   aircraft_type?: string
   operator?: string
+  lat?: number
+  lon?: number
+  alt_ft?: number
+  speed_kt?: number
+  heading?: number
+  squawk?: string
+  on_ground?: boolean
   last_seen: string
 }
 
@@ -115,7 +122,7 @@ const COLORS = {
   textDim: "#3f3f46",
 }
 
-const ALTITUDE_COLORS = [COLORS.blue, COLORS.cyan, COLORS.green, COLORS.orange, COLORS.purple]
+const ALTITUDE_COLORS = [COLORS.cyan, COLORS.blue, COLORS.purple]
 
 export function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -189,12 +196,10 @@ export function StatsPage() {
   }, [])
 
   const altitudeData = altitude ? [
-    { name: "GND", value: altitude.ground, full: "Ground (0-1k)" },
-    { name: "LOW", value: altitude.low, full: "Low (1-10k)" },
-    { name: "MED", value: altitude.medium, full: "Medium (10-25k)" },
-    { name: "HIGH", value: altitude.high, full: "High (25-40k)" },
-    { name: "FL400+", value: altitude.very_high, full: "Very High (40k+)" },
-  ] : []
+    { name: "LOW", value: altitude.low ?? 0, full: "Low (0-10k)" },
+    { name: "MED", value: altitude.medium ?? 0, full: "Medium (10-25k)" },
+    { name: "HIGH", value: altitude.high ?? 0, full: "High (25k+)" },
+  ].filter(d => d.value > 0) : []
 
   const totalAltitude = altitudeData.reduce((sum, d) => sum + d.value, 0)
 
@@ -474,11 +479,11 @@ export function StatsPage() {
             <div className="text-lg font-semibold text-white mb-4">Top Aircraft Types</div>
             <div className="space-y-3">
               {types.length > 0 ? types.slice(0, 8).map((t, i) => (
-                <div key={t.type} className="flex items-center gap-3">
+                <div key={t.aircraft_type} className="flex items-center gap-3">
                   <div className="w-6 text-xs text-zinc-500 font-mono">#{i + 1}</div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-white">{t.type}</span>
+                      <span className="text-sm text-white">{t.aircraft_type}</span>
                       <span className="text-sm font-mono text-zinc-400">{t.count}</span>
                     </div>
                     <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: COLORS.bg }}>
