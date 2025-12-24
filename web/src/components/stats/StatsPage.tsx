@@ -101,7 +101,10 @@ interface RecentAircraft {
   last_seen: string
 }
 
-const ALTITUDE_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4"]
+const ALTITUDE_COLORS = ["#412221", "#5a3a2a", "#7a5a3a", "#E99C33", "#d4a84a"]
+const ACCENT = "#E99C33"
+const CARD_BG = "#161815"
+const CARD_BORDER = "#1C2723"
 
 export function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -181,12 +184,12 @@ export function StatsPage() {
   ] : []
 
   const hourlyChartConfig = {
-    count: { label: "Aircraft", color: "var(--chart-1)" },
+    count: { label: "Aircraft", color: ACCENT },
   }
 
   const dailyChartConfig = {
-    count: { label: "Positions", color: "var(--chart-2)" },
-    unique_aircraft: { label: "Aircraft", color: "var(--chart-1)" },
+    count: { label: "Positions", color: "#1C2723" },
+    unique_aircraft: { label: "Aircraft", color: ACCENT },
   }
 
   const emergencySquawks = aircraft.filter(a => 
@@ -194,33 +197,31 @@ export function StatsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMtOS45NDEgMC0xOCA4LjA1OS0xOCAxOHM4LjA1OSAxOCAxOCAxOCAxOC04LjA1OSAxOC0xOC04LjA1OS0xOC0xOC0xOHptMCAzMmMtNy43MzIgMC0xNC02LjI2OC0xNC0xNHM2LjI2OC0xNCAxNC0xNCAxNCA2LjI2OCAxNCAxNC02LjI2OCAxNC0xNCAxNHoiIHN0cm9rZT0iIzFmMjkzNyIgc3Ryb2tlLXdpZHRoPSIuNSIvPjwvZz48L3N2Zz4=')] opacity-20" />
-      
-      <div className="relative z-10 container mx-auto px-6 py-8">
+    <div className="min-h-screen" style={{ backgroundColor: "#131313" }}>
+      <div className="container mx-auto px-6 py-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
-                <Radar className="h-6 w-6 text-cyan-400" />
+              <div className="p-2 rounded-lg" style={{ backgroundColor: "#1C2723", border: "1px solid #2a3a32" }}>
+                <Radar className="h-6 w-6" style={{ color: ACCENT }} />
               </div>
-              <h1 className="text-3xl font-semibold text-white tracking-tight">Skywatch Statistics</h1>
+              <h1 className="text-3xl font-semibold text-white tracking-tight">Skywatch</h1>
             </div>
-            <p className="text-slate-400 text-sm">Real-time ADS-B receiver monitoring</p>
+            <p className="text-neutral-500 text-sm">Real-time ADS-B receiver monitoring</p>
           </div>
-          <a href="/" className="text-slate-400 hover:text-white text-sm transition-colors">← Back to Home</a>
+          <a href="/" className="text-neutral-500 hover:text-white text-sm transition-colors">← Back</a>
         </header>
 
         {emergencySquawks.length > 0 && (
-          <div className="mb-6 p-4 rounded-lg bg-red-500/20 border border-red-500/50 animate-pulse">
+          <div className="mb-6 p-4 rounded-lg animate-pulse" style={{ backgroundColor: "#412221", border: "1px solid #5a2a2a" }}>
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-6 w-6 text-red-400" />
               <div>
-                <div className="text-red-400 font-semibold">Emergency Squawk Detected!</div>
-                <div className="text-red-300 text-sm">
+                <div className="text-red-400 font-semibold">Emergency Squawk Detected</div>
+                <div className="text-red-300/80 text-sm">
                   {emergencySquawks.map(a => (
                     <span key={a.icao} className="mr-4">
-                      {a.callsign || a.icao} - Squawk {a.squawk}
+                      {a.callsign || a.icao} - {a.squawk}
                       {a.squawk === "7500" && " (Hijack)"}
                       {a.squawk === "7600" && " (Radio Failure)"}
                       {a.squawk === "7700" && " (Emergency)"}
@@ -233,461 +234,355 @@ export function StatsPage() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          <StatCard
-            title="Aircraft Now"
-            value={stats?.aircraft_now ?? "-"}
-            icon={<Plane className="h-4 w-4" />}
-            subtitle="Currently tracked"
-            accent="cyan"
-          />
-          <StatCard
-            title="Total Seen"
-            value={stats?.total_seen ?? "-"}
-            icon={<TrendingUp className="h-4 w-4" />}
-            subtitle="This session"
-            accent="emerald"
-          />
-          <StatCard
-            title="Max Range"
-            value={stats?.max_range_nm ? `${stats.max_range_nm.toFixed(1)} nm` : "-"}
-            icon={<Radar className="h-4 w-4" />}
-            subtitle={stats?.max_range_icao || "No data"}
-            accent="violet"
-          />
-          <StatCard
-            title="Uptime"
-            value={stats?.uptime ?? "-"}
-            icon={<Clock className="h-4 w-4" />}
-            subtitle="Session duration"
-            accent="amber"
-          />
+          <StatCard title="Aircraft Now" value={stats?.aircraft_now ?? "-"} subtitle="Currently tracked" />
+          <StatCard title="Total Seen" value={stats?.total_seen ?? "-"} subtitle="This session" />
+          <StatCard title="Max Range" value={stats?.max_range_nm ? `${stats.max_range_nm.toFixed(1)} nm` : "-"} subtitle={stats?.max_range_icao || "—"} />
+          <StatCard title="Uptime" value={stats?.uptime ?? "-"} subtitle="Session duration" />
         </div>
 
         {overall && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
-            <MiniStatCard icon={<Database className="h-4 w-4" />} label="Total Aircraft" value={overall.total_unique_aircraft?.toLocaleString() ?? "-"} />
-            <MiniStatCard icon={<MapPin className="h-4 w-4" />} label="Total Positions" value={overall.total_positions?.toLocaleString() ?? "-"} />
-            <MiniStatCard icon={<History className="h-4 w-4" />} label="FAA Records" value={overall.total_faa_records?.toLocaleString() ?? "-"} />
-            <MiniStatCard icon={<Calendar className="h-4 w-4" />} label="Positions (24h)" value={overall.positions_last_24h?.toLocaleString() ?? "-"} />
-            <MiniStatCard icon={<Plane className="h-4 w-4" />} label="Aircraft (24h)" value={overall.aircraft_last_24h?.toLocaleString() ?? "-"} />
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-5 mb-6">
+            <MiniStatCard label="Total Aircraft" value={overall.total_unique_aircraft?.toLocaleString() ?? "-"} />
+            <MiniStatCard label="Total Positions" value={overall.total_positions?.toLocaleString() ?? "-"} />
+            <MiniStatCard label="FAA Records" value={overall.total_faa_records?.toLocaleString() ?? "-"} />
+            <MiniStatCard label="Positions (24h)" value={overall.positions_last_24h?.toLocaleString() ?? "-"} />
+            <MiniStatCard label="Aircraft (24h)" value={overall.aircraft_last_24h?.toLocaleString() ?? "-"} />
           </div>
         )}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-6">
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Activity className="h-4 w-4 text-emerald-400" />
-                Feed Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Connection</span>
-                  <span className={`text-sm font-medium flex items-center gap-2 ${feed?.connected ? "text-emerald-400" : "text-red-400"}`}>
-                    <span className={`h-2 w-2 rounded-full ${feed?.connected ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
-                    {feed?.connected ? "Connected" : "Disconnected"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Messages/sec</span>
-                  <span className="text-white font-mono text-sm">{feed?.messages_per_sec?.toFixed(1) ?? "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Total Messages</span>
-                  <span className="text-white font-mono text-sm">{feed?.messages_total?.toLocaleString() ?? "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Reconnects</span>
-                  <span className="text-white font-mono text-sm">{feed?.reconnects ?? "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Source</span>
-                  <span className="text-white font-mono text-sm">{feed?.host ?? "-"}:{feed?.port ?? "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Format</span>
-                  <span className="text-white font-mono text-sm uppercase">{feed?.format ?? "-"}</span>
-                </div>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="h-4 w-4" style={{ color: ACCENT }} />
+              <span className="text-sm font-medium text-neutral-300">Feed Status</span>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Connection</span>
+                <span className={`text-sm font-medium flex items-center gap-2 ${feed?.connected ? "text-green-500" : "text-red-500"}`}>
+                  <span className={`h-2 w-2 rounded-full ${feed?.connected ? "bg-green-500" : "bg-red-500"}`} />
+                  {feed?.connected ? "Connected" : "Disconnected"}
+                </span>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Messages/sec</span>
+                <span className="text-white font-mono text-sm">{feed?.messages_per_sec?.toFixed(1) ?? "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Total Messages</span>
+                <span className="text-white font-mono text-sm">{feed?.messages_total?.toLocaleString() ?? "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Reconnects</span>
+                <span className="text-white font-mono text-sm">{feed?.reconnects ?? "0"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Source</span>
+                <span className="text-neutral-400 font-mono text-xs">{feed?.host ?? "-"}:{feed?.port ?? "-"}</span>
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-violet-400" />
-                System Health
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <HealthBar label="CPU" value={health?.cpu_percent ?? 0} icon={<Cpu className="h-3 w-3" />} />
-                <HealthBar label="Memory" value={health?.memory_percent ?? 0} icon={<HardDrive className="h-3 w-3" />} />
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm flex items-center gap-2">
-                    <Thermometer className="h-3 w-3" />
-                    Temperature
-                  </span>
-                  <span className={`text-sm font-mono ${(health?.temp_celsius ?? 0) > 70 ? "text-red-400" : "text-white"}`}>
-                    {health?.temp_celsius?.toFixed(1) ?? "-"}°C
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Memory Used</span>
-                  <span className="text-white font-mono text-sm">{health?.memory_used_mb ?? "-"} / {health?.memory_total_mb ?? "-"} MB</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Goroutines</span>
-                  <span className="text-white font-mono text-sm">{health?.goroutines ?? "-"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-sm">Platform</span>
-                  <span className="text-white font-mono text-sm">{health?.platform ?? "-"}</span>
-                </div>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Cpu className="h-4 w-4" style={{ color: ACCENT }} />
+              <span className="text-sm font-medium text-neutral-300">System Health</span>
+            </div>
+            <div className="space-y-3">
+              <HealthBar label="CPU" value={health?.cpu_percent ?? 0} />
+              <HealthBar label="Memory" value={health?.memory_percent ?? 0} />
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Temperature</span>
+                <span className={`text-sm font-mono ${(health?.temp_celsius ?? 0) > 70 ? "text-red-400" : "text-white"}`}>
+                  {health?.temp_celsius?.toFixed(1) ?? "-"}°C
+                </span>
               </div>
-            </CardContent>
-          </Card>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Memory</span>
+                <span className="text-neutral-400 font-mono text-xs">{health?.memory_used_mb ?? "-"} / {health?.memory_total_mb ?? "-"} MB</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-neutral-500 text-sm">Platform</span>
+                <span className="text-neutral-400 font-mono text-xs">{health?.platform ?? "-"}</span>
+              </div>
+            </div>
+          </div>
 
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Radio className="h-4 w-4 text-cyan-400" />
-                Altitude Distribution
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[140px]">
-                {altitudeData.length > 0 && altitudeData.some(d => d.value > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={altitudeData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={35}
-                        outerRadius={55}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        {altitudeData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={ALTITUDE_COLORS[index]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data</div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2 justify-center mt-2">
-                {altitudeData.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-1 text-xs text-slate-400">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: ALTITUDE_COLORS[i] }} />
-                    {item.label}: {item.value}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Radio className="h-4 w-4" style={{ color: ACCENT }} />
+              <span className="text-sm font-medium text-neutral-300">Altitude Distribution</span>
+            </div>
+            <div className="h-[130px]">
+              {altitudeData.length > 0 && altitudeData.some(d => d.value > 0) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={altitudeData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={50}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {altitudeData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={ALTITUDE_COLORS[index]} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data</div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center mt-2">
+              {altitudeData.map((item, i) => (
+                <div key={item.name} className="flex items-center gap-1 text-xs text-neutral-500">
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: ALTITUDE_COLORS[i] }} />
+                  {item.label}: {item.value}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2 mb-6">
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300">Aircraft per Hour (24h)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                {hourly.length > 0 ? (
-                  <ChartContainer config={hourlyChartConfig} className="h-full w-full">
-                    <AreaChart data={hourly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis
-                        dataKey="hour"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b", fontSize: 10 }}
-                        tickFormatter={(v) => v.split("T")[1]?.slice(0, 5) || v}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b", fontSize: 10 }}
-                        width={30}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="#06b6d4"
-                        strokeWidth={2}
-                        fill="url(#colorCount)"
-                      />
-                    </AreaChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data available</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="text-sm font-medium text-neutral-300 mb-4">Aircraft per Hour (24h)</div>
+            <div className="h-[180px]">
+              {hourly.length > 0 ? (
+                <ChartContainer config={hourlyChartConfig} className="h-full w-full">
+                  <AreaChart data={hourly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={ACCENT} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="hour"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#525252", fontSize: 10 }}
+                      tickFormatter={(v) => v.split("T")[1]?.slice(0, 5) || v}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#525252", fontSize: 10 }}
+                      width={30}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Area
+                      type="monotone"
+                      dataKey="count"
+                      stroke={ACCENT}
+                      strokeWidth={2}
+                      fill="url(#colorCount)"
+                    />
+                  </AreaChart>
+                </ChartContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
+              )}
+            </div>
+          </div>
 
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300">Daily Activity (7 days)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[200px]">
-                {daily.length > 0 ? (
-                  <ChartContainer config={dailyChartConfig} className="h-full w-full">
-                    <LineChart data={daily} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b", fontSize: 10 }}
-                        tickFormatter={(v) => new Date(v).toLocaleDateString('en-US', { weekday: 'short' })}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b", fontSize: 10 }}
-                        width={40}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line type="monotone" dataKey="unique_aircraft" stroke="#06b6d4" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="count" stroke="#22c55e" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ChartContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data available</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="text-sm font-medium text-neutral-300 mb-4">Daily Activity (7 days)</div>
+            <div className="h-[180px]">
+              {daily.length > 0 ? (
+                <ChartContainer config={dailyChartConfig} className="h-full w-full">
+                  <LineChart data={daily} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <XAxis
+                      dataKey="date"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#525252", fontSize: 10 }}
+                      tickFormatter={(v) => new Date(v).toLocaleDateString('en-US', { weekday: 'short' })}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#525252", fontSize: 10 }}
+                      width={40}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line type="monotone" dataKey="unique_aircraft" stroke={ACCENT} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="count" stroke="#3a4a42" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ChartContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2 mb-6">
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Plane className="h-4 w-4 text-amber-400" />
-                Top Aircraft Types
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[250px]">
-                {types.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={types} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                      <XAxis type="number" hide />
-                      <YAxis
-                        dataKey="type"
-                        type="category"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#94a3b8", fontSize: 11 }}
-                        width={70}
-                      />
-                      <Bar dataKey="count" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data available</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="text-sm font-medium text-neutral-300 mb-4">Top Aircraft Types</div>
+            <div className="h-[220px]">
+              {types.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={types} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+                    <XAxis type="number" hide />
+                    <YAxis
+                      dataKey="type"
+                      type="category"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#737373", fontSize: 11 }}
+                      width={70}
+                    />
+                    <Bar dataKey="count" fill={ACCENT} radius={[0, 3, 3, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
+              )}
+            </div>
+          </div>
 
-          <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-400" />
-                Top Operators
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[250px]">
-                {operators.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={operators} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                      <XAxis type="number" hide />
-                      <YAxis
-                        dataKey="operator"
-                        type="category"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#94a3b8", fontSize: 11 }}
-                        width={100}
-                      />
-                      <Bar dataKey="count" fill="#22c55e" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data available</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+            <div className="text-sm font-medium text-neutral-300 mb-4">Top Operators</div>
+            <div className="h-[220px]">
+              {operators.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={operators} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+                    <XAxis type="number" hide />
+                    <YAxis
+                      dataKey="operator"
+                      type="category"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: "#737373", fontSize: 11 }}
+                      width={100}
+                    />
+                    <Bar dataKey="count" fill="#3a4a42" radius={[0, 3, 3, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-neutral-600 text-sm">No data available</div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-              <Plane className="h-4 w-4 text-cyan-400" />
-              Currently Tracked Aircraft ({aircraft.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700/50">
-                    <th className="text-left py-2 px-2 text-slate-400 font-medium">Callsign</th>
-                    <th className="text-left py-2 px-2 text-slate-400 font-medium">ICAO</th>
-                    <th className="text-left py-2 px-2 text-slate-400 font-medium">Reg</th>
-                    <th className="text-left py-2 px-2 text-slate-400 font-medium">Type</th>
-                    <th className="text-right py-2 px-2 text-slate-400 font-medium">Alt</th>
-                    <th className="text-right py-2 px-2 text-slate-400 font-medium">Speed</th>
-                    <th className="text-right py-2 px-2 text-slate-400 font-medium">Hdg</th>
-                    <th className="text-right py-2 px-2 text-slate-400 font-medium">Dist</th>
-                    <th className="text-left py-2 px-2 text-slate-400 font-medium">Squawk</th>
+        <div className="rounded-xl p-4 mb-6" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+          <div className="text-sm font-medium text-neutral-300 mb-4">Currently Tracked ({aircraft.length})</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b" style={{ borderColor: CARD_BORDER }}>
+                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Callsign</th>
+                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">ICAO</th>
+                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Reg</th>
+                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Type</th>
+                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Alt</th>
+                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Spd</th>
+                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Hdg</th>
+                  <th className="text-right py-2 px-2 text-neutral-500 font-medium text-xs">Dist</th>
+                  <th className="text-left py-2 px-2 text-neutral-500 font-medium text-xs">Sqk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aircraft.length > 0 ? aircraft.slice(0, 15).map((a) => (
+                  <tr key={a.icao} className="border-b hover:bg-white/[0.02]" style={{ borderColor: "#1a1a1a" }}>
+                    <td className="py-2 px-2 text-white font-mono text-xs">{a.callsign || "-"}</td>
+                    <td className="py-2 px-2 text-neutral-500 font-mono text-xs">{a.icao}</td>
+                    <td className="py-2 px-2 text-neutral-400 text-xs">{a.registration || "-"}</td>
+                    <td className="py-2 px-2 text-neutral-400 text-xs">{a.aircraft_type || "-"}</td>
+                    <td className="py-2 px-2 text-right font-mono text-xs">
+                      {a.on_ground ? <span style={{ color: ACCENT }}>GND</span> : <span className="text-white">{a.altitude?.toLocaleString() ?? "-"}</span>}
+                    </td>
+                    <td className="py-2 px-2 text-right text-white font-mono text-xs">{a.speed ?? "-"}</td>
+                    <td className="py-2 px-2 text-right text-neutral-400 font-mono text-xs">{a.heading ? `${a.heading}°` : "-"}</td>
+                    <td className="py-2 px-2 text-right font-mono text-xs" style={{ color: ACCENT }}>{a.distance_nm?.toFixed(1) ?? "-"}</td>
+                    <td className="py-2 px-2">
+                      <span className={`font-mono text-xs ${
+                        a.squawk === "7500" || a.squawk === "7600" || a.squawk === "7700" 
+                          ? "text-red-500 font-bold" 
+                          : "text-neutral-500"
+                      }`}>
+                        {a.squawk || "-"}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {aircraft.length > 0 ? aircraft.slice(0, 20).map((a) => (
-                    <tr key={a.icao} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                      <td className="py-2 px-2 text-white font-mono">{a.callsign || "-"}</td>
-                      <td className="py-2 px-2 text-slate-400 font-mono text-xs">{a.icao}</td>
-                      <td className="py-2 px-2 text-slate-300">{a.registration || "-"}</td>
-                      <td className="py-2 px-2 text-slate-300">{a.aircraft_type || "-"}</td>
-                      <td className="py-2 px-2 text-right text-white font-mono">
-                        {a.on_ground ? <span className="text-amber-400">GND</span> : (a.altitude?.toLocaleString() ?? "-")}
-                      </td>
-                      <td className="py-2 px-2 text-right text-white font-mono">{a.speed ?? "-"}</td>
-                      <td className="py-2 px-2 text-right text-white font-mono">{a.heading ? `${a.heading}°` : "-"}</td>
-                      <td className="py-2 px-2 text-right text-cyan-400 font-mono">{a.distance_nm?.toFixed(1) ?? "-"}</td>
-                      <td className="py-2 px-2">
-                        <span className={`font-mono ${
-                          a.squawk === "7500" || a.squawk === "7600" || a.squawk === "7700" 
-                            ? "text-red-400 font-bold" 
-                            : "text-slate-400"
-                        }`}>
-                          {a.squawk || "-"}
-                        </span>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-500">No aircraft currently tracked</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              {aircraft.length > 20 && (
-                <div className="text-center text-slate-500 text-sm mt-2">
-                  Showing 20 of {aircraft.length} aircraft
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                )) : (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-neutral-600 text-sm">No aircraft currently tracked</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {aircraft.length > 15 && (
+              <div className="text-center text-neutral-600 text-xs mt-3">
+                Showing 15 of {aircraft.length} aircraft
+              </div>
+            )}
+          </div>
+        </div>
 
-        <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-300 flex items-center gap-2">
-              <History className="h-4 w-4 text-violet-400" />
-              Recently Seen Aircraft
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {recent.length > 0 ? recent.map((a) => (
-                <div key={a.icao} className="flex flex-col p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-white font-mono text-sm">{a.callsign || a.icao}</span>
-                    <span className="text-slate-500 text-xs">{a.registration || ""}</span>
-                  </div>
-                  <div className="text-slate-400 text-xs truncate">{a.operator || a.aircraft_type || "-"}</div>
-                  <div className="text-slate-500 text-xs mt-1">
-                    {new Date(a.last_seen).toLocaleTimeString()}
-                  </div>
+        <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+          <div className="text-sm font-medium text-neutral-300 mb-4">Recently Seen</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {recent.length > 0 ? recent.map((a) => (
+              <div key={a.icao} className="p-3 rounded-lg" style={{ backgroundColor: "#131313", border: `1px solid ${CARD_BORDER}` }}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-white font-mono text-sm">{a.callsign || a.icao}</span>
+                  <span className="text-neutral-600 text-xs">{a.registration || ""}</span>
                 </div>
-              )) : (
-                <div className="col-span-full text-center text-slate-500 text-sm py-4">No recent aircraft data</div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="text-neutral-500 text-xs truncate">{a.operator || a.aircraft_type || "-"}</div>
+                <div className="text-neutral-600 text-xs mt-1">
+                  {new Date(a.last_seen).toLocaleTimeString()}
+                </div>
+              </div>
+            )) : (
+              <div className="col-span-full text-center text-neutral-600 text-sm py-4">No recent aircraft</div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function StatCard({ title, value, icon, subtitle, accent }: {
-  title: string
-  value: string | number
-  icon: React.ReactNode
-  subtitle: string
-  accent: "cyan" | "emerald" | "violet" | "amber"
-}) {
-  const colors = {
-    cyan: "from-cyan-500/20 to-cyan-500/5 border-cyan-500/20 text-cyan-400",
-    emerald: "from-emerald-500/20 to-emerald-500/5 border-emerald-500/20 text-emerald-400",
-    violet: "from-violet-500/20 to-violet-500/5 border-violet-500/20 text-violet-400",
-    amber: "from-amber-500/20 to-amber-500/5 border-amber-500/20 text-amber-400",
-  }
-
+function StatCard({ title, value, subtitle }: { title: string; value: string | number; subtitle: string }) {
   return (
-    <Card className={`bg-gradient-to-br ${colors[accent]} backdrop-blur border`}>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-slate-400 text-sm">{title}</span>
-          <span className={colors[accent].split(" ").pop()}>{icon}</span>
-        </div>
-        <div className="text-2xl font-semibold text-white font-mono">{value}</div>
-        <div className="text-xs text-slate-500 mt-1">{subtitle}</div>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl p-4" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
+      <div className="text-neutral-500 text-xs mb-1">{title}</div>
+      <div className="text-2xl font-semibold text-white font-mono" style={{ color: ACCENT }}>{value}</div>
+      <div className="text-neutral-600 text-xs mt-1">{subtitle}</div>
+    </div>
   )
 }
 
-function MiniStatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function MiniStatCard({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="bg-slate-800/30 border-slate-700/50">
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-          {icon}
-          {label}
-        </div>
-        <div className="text-white font-mono text-lg">{value}</div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg p-3" style={{ backgroundColor: "#131313", border: `1px solid ${CARD_BORDER}` }}>
+      <div className="text-neutral-600 text-xs mb-1">{label}</div>
+      <div className="text-white font-mono text-sm">{value}</div>
+    </div>
   )
 }
 
-function HealthBar({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-  const getColor = (v: number) => {
-    if (v > 80) return "bg-red-500"
-    if (v > 60) return "bg-amber-500"
-    return "bg-emerald-500"
-  }
-
+function HealthBar({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-slate-400 text-sm flex items-center gap-2">{icon}{label}</span>
-        <span className="text-white font-mono text-sm">{value.toFixed(1)}%</span>
+        <span className="text-neutral-500 text-sm">{label}</span>
+        <span className="text-white font-mono text-xs">{value.toFixed(1)}%</span>
       </div>
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div className={`h-full ${getColor(value)} rounded-full transition-all duration-500`} style={{ width: `${Math.min(value, 100)}%` }} />
+      <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: "#1a1a1a" }}>
+        <div 
+          className="h-full rounded-full transition-all duration-500" 
+          style={{ 
+            width: `${Math.min(value, 100)}%`,
+            backgroundColor: value > 80 ? "#412221" : value > 60 ? ACCENT : "#1C2723"
+          }} 
+        />
       </div>
     </div>
   )
