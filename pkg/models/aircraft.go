@@ -110,10 +110,10 @@ func (a *Aircraft) Merge(update *Aircraft) {
 	if update.Lon != nil {
 		a.Lon = update.Lon
 	}
-	if update.AltitudeFt != nil {
+	if update.AltitudeFt != nil && *update.AltitudeFt >= -1000 && *update.AltitudeFt < 60000 {
 		a.AltitudeFt = update.AltitudeFt
 	}
-	if update.AltitudeGNSS != nil {
+	if update.AltitudeGNSS != nil && *update.AltitudeGNSS >= -1000 && *update.AltitudeGNSS < 60000 {
 		a.AltitudeGNSS = update.AltitudeGNSS
 	}
 	if update.SpeedKt != nil {

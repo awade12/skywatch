@@ -92,7 +92,7 @@ func (t *Tracker) Update(ac *models.Aircraft) {
 		flight.AircraftType = ac.AircraftType
 	}
 
-	if ac.AltitudeFt != nil && *ac.AltitudeFt > flight.MaxAltFt {
+	if ac.AltitudeFt != nil && *ac.AltitudeFt > flight.MaxAltFt && *ac.AltitudeFt < 60000 {
 		flight.MaxAltFt = *ac.AltitudeFt
 	}
 
