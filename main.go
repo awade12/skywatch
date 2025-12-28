@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -38,7 +41,12 @@ func main() {
 	noDatabase := flag.Bool("no-db", false, "Run without database connection")
 	flag.Parse()
 
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	logHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	logger := slog.New(logHandler)
+	slog.SetDefault(logger)
+	stdLogger := slog.NewLogLogger(logHandler, slog.LevelInfo)
+	log.SetOutput(stdLogger.Writer())
+	log.SetFlags(0)
 
 	cfg, err := config.Load(*configFile)
 	if err != nil {
@@ -74,7 +82,7 @@ func main() {
 		cfg.SBSPort = 30005
 	}
 
-	log.Printf("[MAIN] Starting Skywatch")
+	logger.Info("starting Skywatch")
 
 	var dump1090Cmd *exec.Cmd
 	if *startDump1090 {
@@ -114,21 +122,37 @@ func main() {
 		faaLookup = lookup.NewFAALookup(nil)
 	}
 
-	log.Printf("[MAIN] Feed: %s:%d (%s format)", cfg.SBSHost, cfg.SBSPort, cfg.FeedFormat)
-	log.Printf("[MAIN] HTTP server: %s", cfg.HTTPAddr)
+	logger.Info("configuration loaded",
+		"feed_host", cfg.SBSHost,
+		"feed_port", cfg.SBSPort,
+		"feed_format", cfg.FeedFormat,
+		"http_addr", cfg.HTTPAddr,
+	)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	groupCtx, groupCancel := context.WithCancel(ctx)
+	defer groupCancel()
+
+	var wg sync.WaitGroup
+	var groupErr error
+	var groupErrMu sync.Mutex
+
+	setGroupErr := func(err error) {
+		groupErrMu.Lock()
+		if groupErr == nil {
+			groupErr = err
+		}
+		groupErrMu.Unlock()
+	}
 
 	var webhookDispatcher *webhook.Dispatcher
 	if cfg.Webhooks.DiscordURL != "" {
 		webhookDispatcher = webhook.NewDispatcher(cfg.Webhooks)
-		go webhookDispatcher.Run(ctx)
-		log.Printf("[MAIN] Webhooks enabled (Discord)")
+		logger.Info("webhooks enabled", "provider", "discord")
 	}
 
 	healthMonitor := health.NewMonitor(cfg.Webhooks.HealthThresholds, webhookDispatcher)
-	go healthMonitor.Run(ctx)
 
 	var rangeRepo rangetracker.Repository
 	if repo != nil {
@@ -139,20 +163,20 @@ func main() {
 	flightTrk := flight.New(repo, cfg.StaleTimeout)
 
 	trk := tracker.New(tracker.Options{
-		StaleAfter:    cfg.StaleTimeout,
-		RxLat:         cfg.RxLat,
-		RxLon:         cfg.RxLon,
-		TrailLength:   cfg.TrailLength,
-		Repo:          repo,
-		FAALookup:     faaLookup,
-		Webhooks:      webhookDispatcher,
-		RangeTracker:  rangeTrk,
-		FlightTracker: flightTrk,
+		StaleAfter:           cfg.StaleTimeout,
+		RxLat:                cfg.RxLat,
+		RxLon:                cfg.RxLon,
+		TrailLength:          cfg.TrailLength,
+		Repo:                 repo,
+		FAALookup:            faaLookup,
+		Webhooks:             webhookDispatcher,
+		RangeTracker:         rangeTrk,
+		FlightTracker:        flightTrk,
+		PersistenceWorkers:   4,
+		PersistenceQueueSize: 512,
 	})
-	go trk.StartCleanup(ctx)
 
 	feedClient := feed.NewClient(cfg.SBSHost, cfg.SBSPort, cfg.FeedFormat, cfg.RxLat, cfg.RxLon, trk)
-	go feedClient.Run(ctx)
 
 	server := api.NewServer(trk, repo)
 	server.SetHealthMonitor(healthMonitor)
@@ -161,6 +185,8 @@ func main() {
 	server.SetNodeName(cfg.NodeName)
 	server.SetRangeTracker(rangeTrk)
 	server.SetFlightTracker(flightTrk)
+	readiness := health.NewReadiness()
+	server.SetReadiness(readiness)
 	server.StartHub()
 
 	httpServer := &http.Server{
@@ -168,26 +194,76 @@ func main() {
 		Handler: server.Handler(),
 	}
 
-	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[MAIN] HTTP server error: %v", err)
+	runComponent := func(name string, fn func(context.Context) error) {
+		readiness.MarkNotReady(name, "starting")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			readiness.MarkReady(name)
+			logger.Info("component running", "component", name)
+			defer readiness.MarkNotReady(name, "stopped")
+			if err := fn(groupCtx); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				logger.Error("component exited", "component", name, "error", err)
+				setGroupErr(err)
+				groupCancel()
+				return
+			}
+			logger.Info("component exited", "component", name)
+		}()
+	}
+
+	if webhookDispatcher != nil {
+		runComponent("webhooks", func(ctx context.Context) error {
+			webhookDispatcher.Run(ctx)
+			return ctx.Err()
+		})
+	}
+
+	runComponent("health_monitor", func(ctx context.Context) error {
+		healthMonitor.Run(ctx)
+		return ctx.Err()
+	})
+
+	runComponent("feed_client", func(ctx context.Context) error {
+		feedClient.Run(ctx)
+		return ctx.Err()
+	})
+
+	runComponent("tracker", func(ctx context.Context) error {
+		return trk.Run(ctx)
+	})
+
+	runComponent("http_server", func(ctx context.Context) error {
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- httpServer.ListenAndServe()
+		}()
+
+		select {
+		case <-ctx.Done():
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if err := httpServer.Shutdown(shutdownCtx); err != nil && err != http.ErrServerClosed {
+				return err
+			}
+			if err := <-errCh; err != nil && err != http.ErrServerClosed {
+				return err
+			}
+			return nil
+		case err := <-errCh:
+			if err == http.ErrServerClosed {
+				return nil
+			}
+			return err
 		}
-	}()
+	})
 
-	log.Printf("[MAIN] Server running")
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-
-	log.Printf("[MAIN] Shutting down...")
-	cancel()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[MAIN] HTTP shutdown error: %v", err)
+	wg.Wait()
+	if err := groupErr; err != nil && !errors.Is(err, context.Canceled) {
+		logger.Error("service error", "error", err)
 	}
 
 	if db != nil {
@@ -195,12 +271,12 @@ func main() {
 	}
 
 	if dump1090Cmd != nil && dump1090Cmd.Process != nil {
-		log.Printf("[MAIN] Stopping dump1090...")
+		logger.Info("stopping dump1090")
 		dump1090Cmd.Process.Signal(syscall.SIGTERM)
 		dump1090Cmd.Wait()
 	}
 
-	log.Printf("[MAIN] Shutdown complete")
+	logger.Info("shutdown complete")
 }
 
 func startDump1090Process(deviceIndex, port int, feedFormat string) *exec.Cmd {

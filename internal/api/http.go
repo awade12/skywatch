@@ -27,6 +27,7 @@ type Server struct {
 	nodeName      string
 	rangeTracker  *rangetracker.Tracker
 	flightTracker *flight.Tracker
+	readiness     *health.Readiness
 }
 
 func NewServer(t *tracker.Tracker, repo *database.Repository) *Server {
@@ -61,6 +62,10 @@ func (s *Server) SetRangeTracker(rt *rangetracker.Tracker) {
 
 func (s *Server) SetFlightTracker(ft *flight.Tracker) {
 	s.flightTracker = ft
+}
+
+func (s *Server) SetReadiness(r *health.Readiness) {
+	s.readiness = r
 }
 
 func (s *Server) Handler() http.Handler {
@@ -277,9 +282,11 @@ func (s *Server) handleReceiver(w http.ResponseWriter, r *http.Request) {
 }
 
 type healthResponse struct {
-	Status        string `json:"status"`
-	Uptime        string `json:"uptime"`
-	AircraftCount int    `json:"aircraft_count"`
+	Status        string                           `json:"status"`
+	Uptime        string                           `json:"uptime"`
+	AircraftCount int                              `json:"aircraft_count"`
+	Ready         bool                             `json:"ready"`
+	Components    map[string]health.ComponentState `json:"components,omitempty"`
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +299,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Status:        "ok",
 		Uptime:        time.Since(s.startTime).Round(time.Second).String(),
 		AircraftCount: s.tracker.Count(),
+		Ready:         true,
+	}
+	if s.readiness != nil {
+		resp.Ready = s.readiness.Ready()
+		resp.Components = s.readiness.Snapshot()
+		if !resp.Ready {
+			resp.Status = "initializing"
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

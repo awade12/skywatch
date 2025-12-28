@@ -4,10 +4,34 @@ import (
 	"context"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"adsb-tracker/pkg/models"
 )
+
+const (
+	defaultPersistenceWorkers  = 4
+	defaultPersistenceQueueLen = 512
+	defaultFAAQueueLen         = 256
+)
+
+type persistenceKind int
+
+const (
+	persistAircraft persistenceKind = iota
+	persistPosition
+)
+
+type persistenceTask struct {
+	kind     persistenceKind
+	aircraft models.Aircraft
+}
+
+type webhookRequest struct {
+	aircraft models.Aircraft
+	isNew    bool
+}
 
 type EventType int
 
@@ -49,6 +73,15 @@ type Tracker struct {
 	rangeTracker  RangeTracker
 	flightTracker FlightTracker
 
+	persistCh      chan persistenceTask
+	persistWorkers int
+
+	faaLookupCh  chan string
+	faaPending   map[string]struct{}
+	faaPendingMu sync.Mutex
+
+	shutdown atomic.Bool
+
 	eventsMu    sync.RWMutex
 	subscribers []chan AircraftEvent
 }
@@ -89,27 +122,44 @@ type FlightTracker interface {
 }
 
 type Options struct {
-	StaleAfter    time.Duration
-	RxLat         float64
-	RxLon         float64
-	TrailLength   int
-	Repo          Repository
-	FAALookup     FAALookup
-	Webhooks      WebhookDispatcher
-	RangeTracker  RangeTracker
-	FlightTracker FlightTracker
+	StaleAfter           time.Duration
+	RxLat                float64
+	RxLon                float64
+	TrailLength          int
+	Repo                 Repository
+	FAALookup            FAALookup
+	Webhooks             WebhookDispatcher
+	RangeTracker         RangeTracker
+	FlightTracker        FlightTracker
+	PersistenceWorkers   int
+	PersistenceQueueSize int
 }
 
 func New(opts Options) *Tracker {
+	if opts.PersistenceWorkers <= 0 {
+		opts.PersistenceWorkers = defaultPersistenceWorkers
+	}
+	if opts.PersistenceQueueSize <= 0 {
+		opts.PersistenceQueueSize = defaultPersistenceQueueLen
+	}
+
 	t := &Tracker{
-		aircraft:      make(map[string]*models.Aircraft),
-		staleAfter:    opts.StaleAfter,
-		trailLength:   opts.TrailLength,
-		repo:          opts.Repo,
-		faaLookup:     opts.FAALookup,
-		webhooks:      opts.Webhooks,
-		rangeTracker:  opts.RangeTracker,
-		flightTracker: opts.FlightTracker,
+		aircraft:       make(map[string]*models.Aircraft),
+		staleAfter:     opts.StaleAfter,
+		trailLength:    opts.TrailLength,
+		repo:           opts.Repo,
+		faaLookup:      opts.FAALookup,
+		webhooks:       opts.Webhooks,
+		rangeTracker:   opts.RangeTracker,
+		flightTracker:  opts.FlightTracker,
+		persistWorkers: opts.PersistenceWorkers,
+		faaPending:     make(map[string]struct{}),
+	}
+	if t.repo != nil {
+		t.persistCh = make(chan persistenceTask, opts.PersistenceQueueSize)
+	}
+	if t.faaLookup != nil {
+		t.faaLookupCh = make(chan string, defaultFAAQueueLen)
 	}
 	if t.trailLength == 0 {
 		t.trailLength = 50
@@ -157,66 +207,127 @@ func (t *Tracker) Update(update *models.Aircraft) {
 		return
 	}
 
+	var (
+		saveAircraft   []models.Aircraft
+		savePositions  []models.Aircraft
+		rangeUpdates   []models.Aircraft
+		flightUpdates  []models.Aircraft
+		webhookUpdates []webhookRequest
+		faaRequests    []string
+		events         []AircraftEvent
+		newICAO        string
+	)
+
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	existing, ok := t.aircraft[update.ICAO]
 	if !ok {
 		ac := update.Copy()
 		ac.CalculateDistance(t.rxLocation)
-		t.enrichWithFAA(&ac)
 		t.aircraft[update.ICAO] = &ac
 		t.totalSeen++
 		t.updateMaxRange(&ac)
-		t.recordRange(&ac)
-		t.updateFlightTracker(&ac)
-		t.saveToRepo(&ac)
-		log.Printf("[TRACKER] Aircraft added: %s", update.ICAO)
-		t.broadcast(AircraftEvent{Type: EventAdd, Aircraft: ac})
-		t.checkWebhookEvents(&ac, true)
-		return
+
+		snapshot := ac.Copy()
+		rangeUpdates = append(rangeUpdates, snapshot)
+		flightUpdates = append(flightUpdates, snapshot)
+		saveAircraft = append(saveAircraft, snapshot)
+		events = append(events, AircraftEvent{Type: EventAdd, Aircraft: snapshot})
+		webhookUpdates = append(webhookUpdates, webhookRequest{aircraft: snapshot, isNew: true})
+		if t.needsFAAEnrichment(&ac) {
+			faaRequests = append(faaRequests, ac.ICAO)
+		}
+		newICAO = ac.ICAO
+	} else {
+		oldSquawk := existing.Squawk
+		oldLat := existing.Lat
+		oldLon := existing.Lon
+		oldAlt := existing.AltitudeFt
+		oldSpd := existing.SpeedKt
+		oldHdg := existing.Heading
+		oldTime := existing.LastSeen
+
+		if !t.isPositionValid(existing, update, oldTime) {
+			update.Lat = nil
+			update.Lon = nil
+		}
+
+		existing.Merge(update)
+		existing.CalculateDistance(t.rxLocation)
+		t.updateMaxRange(existing)
+
+		var snapshot models.Aircraft
+		var haveSnapshot bool
+		getSnapshot := func() models.Aircraft {
+			if !haveSnapshot {
+				snapshot = existing.Copy()
+				haveSnapshot = true
+			}
+			return snapshot
+		}
+
+		rangeUpdates = append(rangeUpdates, getSnapshot())
+		flightUpdates = append(flightUpdates, getSnapshot())
+
+		posChanged := hasStateChanged(oldLat, existing.Lat) || hasStateChanged(oldLon, existing.Lon)
+
+		if posChanged && existing.Lat != nil && existing.Lon != nil {
+			t.addToTrail(existing)
+			savePositions = append(savePositions, getSnapshot())
+		}
+
+		if posChanged ||
+			hasIntChanged(oldAlt, existing.AltitudeFt) ||
+			hasStateChanged(oldSpd, existing.SpeedKt) ||
+			hasStateChanged(oldHdg, existing.Heading) {
+			saveAircraft = append(saveAircraft, getSnapshot())
+			events = append(events, AircraftEvent{Type: EventUpdate, Aircraft: getSnapshot()})
+		}
+
+		if existing.Squawk != oldSquawk {
+			webhookUpdates = append(webhookUpdates, webhookRequest{aircraft: getSnapshot(), isNew: false})
+		}
+
+		if t.needsFAAEnrichment(existing) {
+			faaRequests = append(faaRequests, existing.ICAO)
+		}
 	}
 
-	oldSquawk := existing.Squawk
-	oldLat := existing.Lat
-	oldLon := existing.Lon
-	oldAlt := existing.AltitudeFt
-	oldSpd := existing.SpeedKt
-	oldHdg := existing.Heading
-	oldTime := existing.LastSeen
+	t.mu.Unlock()
 
-	if !t.isPositionValid(existing, update, oldTime) {
-		update.Lat = nil
-		update.Lon = nil
+	for _, evt := range events {
+		eventCopy := evt
+		t.broadcast(eventCopy)
 	}
 
-	existing.Merge(update)
-	existing.CalculateDistance(t.rxLocation)
-	t.updateMaxRange(existing)
-	t.recordRange(existing)
-	t.updateFlightTracker(existing)
-
-	if existing.Registration == "" {
-		t.enrichWithFAA(existing)
+	for _, ac := range saveAircraft {
+		t.queueSaveAircraft(ac)
 	}
 
-	posChanged := hasStateChanged(oldLat, existing.Lat) || hasStateChanged(oldLon, existing.Lon)
-
-	if posChanged && existing.Lat != nil && existing.Lon != nil {
-		t.addToTrail(existing)
-		t.savePosition(existing)
+	for _, ac := range savePositions {
+		t.queueSavePosition(ac)
 	}
 
-	if posChanged ||
-		hasIntChanged(oldAlt, existing.AltitudeFt) ||
-		hasStateChanged(oldSpd, existing.SpeedKt) ||
-		hasStateChanged(oldHdg, existing.Heading) {
-		t.saveToRepo(existing)
-		t.broadcast(AircraftEvent{Type: EventUpdate, Aircraft: existing.Copy()})
+	for _, ac := range rangeUpdates {
+		acCopy := ac
+		t.recordRange(&acCopy)
 	}
 
-	if existing.Squawk != oldSquawk {
-		t.checkWebhookEvents(existing, false)
+	for _, ac := range flightUpdates {
+		t.dispatchFlightUpdate(ac)
+	}
+
+	for _, req := range webhookUpdates {
+		acCopy := req.aircraft
+		t.checkWebhookEvents(&acCopy, req.isNew)
+	}
+
+	for _, icao := range faaRequests {
+		t.scheduleFAAEnrichment(icao)
+	}
+
+	if newICAO != "" {
+		log.Printf("[TRACKER] Aircraft added: %s", newICAO)
 	}
 }
 
@@ -242,18 +353,11 @@ func (t *Tracker) checkWebhookEvents(ac *models.Aircraft, isNew bool) {
 	}
 }
 
-func (t *Tracker) enrichWithFAA(ac *models.Aircraft) {
+func (t *Tracker) needsFAAEnrichment(ac *models.Aircraft) bool {
 	if t.faaLookup == nil {
-		return
+		return false
 	}
-	info := t.faaLookup.Lookup(ac.ICAO)
-	if info != nil {
-		ac.Registration = info.Registration
-		ac.AircraftType = info.AircraftType
-		if info.Owner != "" {
-			ac.Operator = info.Owner
-		}
-	}
+	return ac.Registration == "" || ac.AircraftType == "" || ac.Operator == ""
 }
 
 func (t *Tracker) addToTrail(ac *models.Aircraft) {
@@ -282,26 +386,145 @@ func (t *Tracker) addToTrail(ac *models.Aircraft) {
 	}
 }
 
-func (t *Tracker) saveToRepo(ac *models.Aircraft) {
-	if t.repo == nil {
+func (t *Tracker) scheduleFAAEnrichment(icao string) {
+	if t.faaLookupCh == nil || t.shutdown.Load() {
 		return
 	}
-	go func() {
-		if err := t.repo.SaveAircraft(ac); err != nil {
-			log.Printf("[TRACKER] Failed to save aircraft %s: %v", ac.ICAO, err)
-		}
-	}()
+
+	t.faaPendingMu.Lock()
+	if _, exists := t.faaPending[icao]; exists {
+		t.faaPendingMu.Unlock()
+		return
+	}
+	t.faaPending[icao] = struct{}{}
+	t.faaPendingMu.Unlock()
+
+	select {
+	case t.faaLookupCh <- icao:
+	default:
+		t.faaPendingMu.Lock()
+		delete(t.faaPending, icao)
+		t.faaPendingMu.Unlock()
+		log.Printf("[TRACKER] FAA lookup queue full, dropping request for %s", icao)
+	}
 }
 
-func (t *Tracker) savePosition(ac *models.Aircraft) {
+func (t *Tracker) applyFAAInfo(icao string, info *models.FAAInfo) {
+	if info == nil {
+		return
+	}
+
+	t.mu.Lock()
+	ac, ok := t.aircraft[icao]
+	if !ok {
+		t.mu.Unlock()
+		return
+	}
+
+	updated := false
+	if info.Registration != "" && ac.Registration != info.Registration {
+		ac.Registration = info.Registration
+		updated = true
+	}
+	if info.AircraftType != "" && ac.AircraftType != info.AircraftType {
+		ac.AircraftType = info.AircraftType
+		updated = true
+	}
+	if info.Owner != "" && ac.Operator != info.Owner {
+		ac.Operator = info.Owner
+		updated = true
+	}
+
+	var snapshot models.Aircraft
+	if updated {
+		snapshot = ac.Copy()
+	}
+	t.mu.Unlock()
+
+	if updated {
+		t.queueSaveAircraft(snapshot)
+		t.dispatchFlightUpdate(snapshot)
+		t.broadcast(AircraftEvent{Type: EventUpdate, Aircraft: snapshot})
+	}
+}
+
+func (t *Tracker) queueSaveAircraft(ac models.Aircraft) {
+	if t.persistCh == nil || t.shutdown.Load() {
+		return
+	}
+	task := persistenceTask{kind: persistAircraft, aircraft: ac}
+	select {
+	case t.persistCh <- task:
+	default:
+		log.Printf("[TRACKER] Persistence queue full, dropping aircraft save for %s", ac.ICAO)
+	}
+}
+
+func (t *Tracker) queueSavePosition(ac models.Aircraft) {
+	if t.persistCh == nil || t.shutdown.Load() {
+		return
+	}
+	task := persistenceTask{kind: persistPosition, aircraft: ac}
+	select {
+	case t.persistCh <- task:
+	default:
+		log.Printf("[TRACKER] Persistence queue full, dropping position save for %s", ac.ICAO)
+	}
+}
+
+func (t *Tracker) handlePersistenceTask(task persistenceTask) {
 	if t.repo == nil {
 		return
 	}
-	go func() {
-		if err := t.repo.SavePosition(ac); err != nil {
+
+	ac := task.aircraft
+	switch task.kind {
+	case persistAircraft:
+		if err := t.repo.SaveAircraft(&ac); err != nil {
+			log.Printf("[TRACKER] Failed to save aircraft %s: %v", ac.ICAO, err)
+		}
+	case persistPosition:
+		if err := t.repo.SavePosition(&ac); err != nil {
 			log.Printf("[TRACKER] Failed to save position for %s: %v", ac.ICAO, err)
 		}
-	}()
+	}
+}
+
+func (t *Tracker) runPersistenceWorker(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case task, ok := <-t.persistCh:
+			if !ok {
+				return
+			}
+			t.handlePersistenceTask(task)
+		}
+	}
+}
+
+func (t *Tracker) runFAAWorker(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case icao, ok := <-t.faaLookupCh:
+			if !ok {
+				return
+			}
+			info := t.faaLookup.Lookup(icao)
+			t.faaPendingMu.Lock()
+			delete(t.faaPending, icao)
+			t.faaPendingMu.Unlock()
+			if info != nil {
+				t.applyFAAInfo(icao, info)
+			}
+		}
+	}
 }
 
 func hasStateChanged(old, new *float64) bool {
@@ -347,7 +570,7 @@ func (t *Tracker) isPositionValid(existing *models.Aircraft, update *models.Airc
 	}
 
 	if dist > maxDistNM {
-		log.Printf("[TRACKER] Position jump rejected for %s: %.1f NM in %.1fs (max %.1f NM)", 
+		log.Printf("[TRACKER] Position jump rejected for %s: %.1f NM in %.1fs (max %.1f NM)",
 			update.ICAO, dist, elapsed, maxDistNM)
 		return false
 	}
@@ -394,11 +617,12 @@ func (t *Tracker) recordRange(ac *models.Aircraft) {
 	}
 }
 
-func (t *Tracker) updateFlightTracker(ac *models.Aircraft) {
+func (t *Tracker) dispatchFlightUpdate(ac models.Aircraft) {
 	if t.flightTracker == nil {
 		return
 	}
-	t.flightTracker.Update(ac)
+	acCopy := ac
+	t.flightTracker.Update(&acCopy)
 }
 
 func (t *Tracker) GetStats() Stats {
@@ -545,15 +769,31 @@ func (t *Tracker) Count() int {
 	return len(t.aircraft)
 }
 
-func (t *Tracker) StartCleanup(ctx context.Context) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+func (t *Tracker) Run(ctx context.Context) error {
+	var wg sync.WaitGroup
+
+	if t.persistCh != nil {
+		for i := 0; i < t.persistWorkers; i++ {
+			wg.Add(1)
+			go t.runPersistenceWorker(ctx, &wg)
+		}
+	}
+
+	if t.faaLookupCh != nil {
+		wg.Add(1)
+		go t.runFAAWorker(ctx, &wg)
+	}
+
+	cleanupTicker := time.NewTicker(10 * time.Second)
+	defer cleanupTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-ticker.C:
+			t.shutdown.Store(true)
+			wg.Wait()
+			return ctx.Err()
+		case <-cleanupTicker.C:
 			t.cleanupStale()
 		}
 	}
@@ -592,4 +832,3 @@ func (t *Tracker) cleanupStale() {
 	}
 	t.mu.Unlock()
 }
-

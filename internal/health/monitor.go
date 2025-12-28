@@ -1,13 +1,10 @@
 package health
 
 import (
-	"bufio"
 	"context"
 	"log"
-	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +33,18 @@ type Monitor struct {
 
 	prevIdleTime  uint64
 	prevTotalTime uint64
+}
+
+type metricsProvider interface {
+	CPUPercent(*Monitor) float64
+	MemoryUsage() (float64, uint64, uint64)
+	Temperature() float64
+}
+
+var provider metricsProvider = newPlatformMetrics()
+
+func setMetricsProvider(p metricsProvider) {
+	provider = p
 }
 
 func NewMonitor(thresholds config.HealthThresholdsConfig, dispatcher *webhook.Dispatcher) *Monitor {
@@ -80,9 +89,9 @@ func (m *Monitor) collect() {
 		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
 	}
 
-	stats.CPUPercent = m.readCPU()
-	stats.MemoryPercent, stats.MemoryUsedMB, stats.MemoryTotalMB = m.readMemory()
-	stats.TempCelsius = m.readTemperature()
+	stats.CPUPercent = provider.CPUPercent(m)
+	stats.MemoryPercent, stats.MemoryUsedMB, stats.MemoryTotalMB = provider.MemoryUsage()
+	stats.TempCelsius = provider.Temperature()
 
 	m.mu.Lock()
 	m.lastStats = stats
@@ -116,133 +125,6 @@ func (m *Monitor) checkThresholds(stats Stats) {
 	}
 }
 
-func (m *Monitor) readCPU() float64 {
-	if runtime.GOOS != "linux" {
-		return 0
-	}
-
-	file, err := os.Open("/proc/stat")
-	if err != nil {
-		return 0
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "cpu ") {
-			fields := strings.Fields(line)
-			if len(fields) < 5 {
-				return 0
-			}
-
-			var total, idle uint64
-			for i, v := range fields[1:] {
-				val, _ := strconv.ParseUint(v, 10, 64)
-				total += val
-				if i == 3 {
-					idle = val
-				}
-			}
-
-			if m.prevTotalTime == 0 {
-				m.prevTotalTime = total
-				m.prevIdleTime = idle
-				return 0
-			}
-
-			totalDelta := total - m.prevTotalTime
-			idleDelta := idle - m.prevIdleTime
-
-			m.prevTotalTime = total
-			m.prevIdleTime = idle
-
-			if totalDelta == 0 {
-				return 0
-			}
-
-			return (1 - float64(idleDelta)/float64(totalDelta)) * 100
-		}
-	}
-
-	return 0
-}
-
-func (m *Monitor) readMemory() (percent float64, usedMB, totalMB uint64) {
-	if runtime.GOOS != "linux" {
-		var mem runtime.MemStats
-		runtime.ReadMemStats(&mem)
-		return 0, mem.Alloc / 1024 / 1024, 0
-	}
-
-	file, err := os.Open("/proc/meminfo")
-	if err != nil {
-		return 0, 0, 0
-	}
-	defer file.Close()
-
-	var memTotal, memAvailable uint64
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		val, _ := strconv.ParseUint(fields[1], 10, 64)
-
-		switch fields[0] {
-		case "MemTotal:":
-			memTotal = val
-		case "MemAvailable:":
-			memAvailable = val
-		}
-	}
-
-	if memTotal == 0 {
-		return 0, 0, 0
-	}
-
-	memUsed := memTotal - memAvailable
-	percent = float64(memUsed) / float64(memTotal) * 100
-	usedMB = memUsed / 1024
-	totalMB = memTotal / 1024
-
-	return percent, usedMB, totalMB
-}
-
-func (m *Monitor) readTemperature() float64 {
-	if runtime.GOOS != "linux" {
-		return 0
-	}
-
-	paths := []string{
-		"/sys/class/thermal/thermal_zone0/temp",
-		"/sys/class/hwmon/hwmon0/temp1_input",
-	}
-
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
-		temp, err := strconv.ParseFloat(strings.TrimSpace(string(data)), 64)
-		if err != nil {
-			continue
-		}
-
-		if temp > 1000 {
-			temp = temp / 1000
-		}
-
-		return temp
-	}
-
-	return 0
-}
-
 func (m *Monitor) GetUptime() time.Duration {
 	return time.Since(m.startTime)
 }
@@ -253,4 +135,3 @@ func (m *Monitor) LogStats() {
 		stats.CPUPercent, stats.MemoryPercent, stats.MemoryUsedMB, stats.MemoryTotalMB,
 		stats.TempCelsius, stats.UptimeString, stats.GoRoutines)
 }
-
