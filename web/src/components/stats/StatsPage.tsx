@@ -24,10 +24,17 @@ interface ReceiverInfo {
   node_name: string
 }
 
+interface ComponentState {
+  ready: boolean
+  message?: string
+}
+
 interface HealthStatus {
   status: string
   uptime: string
   aircraft_count: number
+  ready: boolean
+  components?: Record<string, ComponentState>
 }
 
 interface ReceiverHealth {
@@ -279,6 +286,16 @@ export function StatsPage() {
     )
   })
 
+  const componentEntries = healthStatus?.components
+    ? Object.entries(healthStatus.components)
+    : []
+
+  const formatComponentName = (name: string) =>
+    name
+      .split("_")
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ")
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: COLORS.bg }}>
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -317,9 +334,9 @@ export function StatsPage() {
               <div className="text-right">
                 <div className="text-xs text-zinc-500 mb-1">Uptime</div>
                 <div className="text-lg font-mono text-white">{stats?.uptime ?? "-"}</div>
-                <div className="text-xs text-zinc-500 mt-2">Status</div>
-                <div className={`text-sm font-medium ${healthStatus?.status === "ok" ? "text-green-500" : "text-red-500"}`}>
-                  {healthStatus?.status?.toUpperCase() ?? "-"}
+                <div className="text-xs text-zinc-500 mt-2">System</div>
+                <div className={`text-sm font-medium ${healthStatus?.ready ? "text-green-500" : "text-yellow-400"}`}>
+                  {healthStatus ? (healthStatus.ready ? "READY" : healthStatus.status?.toUpperCase() ?? "INIT") : "-"}
                 </div>
               </div>
             </div>
@@ -348,6 +365,36 @@ export function StatsPage() {
             <div className="text-sm text-zinc-500 mt-1">{feed?.messages_total?.toLocaleString() ?? "0"} total</div>
             <div className="mt-2 text-xs text-zinc-600 font-mono">{feed?.format?.toUpperCase()} @ {feed?.host}:{feed?.port}</div>
           </div>
+
+          {healthStatus && (
+            <div className="rounded-2xl p-5" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.cardBorder}` }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Server className="h-4 w-4 text-blue-400" />
+                <span className="text-sm text-zinc-400">Component Readiness</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${healthStatus.ready ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`} />
+                <span className="text-sm text-zinc-300">
+                  {healthStatus.ready ? "All systems ready" : "Initializing components"}
+                </span>
+              </div>
+              {componentEntries.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {componentEntries.map(([name, state]) => (
+                    <div key={name} className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-500">{formatComponentName(name)}</span>
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${state.ready ? "bg-green-500" : "bg-red-500 animate-pulse"}`} />
+                        <span className={`font-mono ${state.ready ? "text-green-400" : "text-red-400"}`}>
+                          {state.ready ? "ready" : (state.message || "stopped")}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {overall && (
