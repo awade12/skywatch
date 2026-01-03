@@ -162,14 +162,23 @@ func main() {
 
 	flightTrk := flight.New(repo, cfg.StaleTimeout)
 
+	var trackerRepo tracker.Repository
+	if repo != nil {
+		trackerRepo = repo
+	}
+	var trackerWebhooks tracker.WebhookDispatcher
+	if webhookDispatcher != nil {
+		trackerWebhooks = webhookDispatcher
+	}
+
 	trk := tracker.New(tracker.Options{
 		StaleAfter:           cfg.StaleTimeout,
 		RxLat:                cfg.RxLat,
 		RxLon:                cfg.RxLon,
 		TrailLength:          cfg.TrailLength,
-		Repo:                 repo,
+		Repo:                 trackerRepo,
 		FAALookup:            faaLookup,
-		Webhooks:             webhookDispatcher,
+		Webhooks:             trackerWebhooks,
 		RangeTracker:         rangeTrk,
 		FlightTracker:        flightTrk,
 		PersistenceWorkers:   4,

@@ -9,3 +9,18 @@ Flight route prediction - Draw estimated path based on heading/speed (LATER)
 Altitude filter - Show only aircraft above/below certain altitude (LATER)
 
 Replay mode - Play back recorded flights from database (LATER)
+
+
+dev instructions:
+
+sudo systemctl stop skywatch
+sudo systemctl disable skywatch - stop the service on boot
+
+
+reable it 
+
+sudo systemctl start skywatch
+sudo systemctl enable skywatch
+
+
+status check sudo systemctl status skywatch
